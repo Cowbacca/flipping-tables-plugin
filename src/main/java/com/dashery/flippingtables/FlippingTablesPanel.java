@@ -27,12 +27,12 @@
 package com.dashery.flippingtables;
 
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.ui.components.FlatTextField;
 
-import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -41,26 +41,38 @@ import java.awt.*;
 @Slf4j
 public class FlippingTablesPanel extends PluginPanel {
 
+    private static final String CALCULATE_ADVICE_BUTTON_TEXT = "Calculate advice";
+    private static final String LOADING_BUTTON_TEXT = "Loading...";
+
     private final FlippingTablesPlugin plugin;
     private final FlippingTablesConfig config;
     private final ClientThread clientThread;
 
+
+    private final JButton calculateAdviceButton;
+
+    private final JTextField buyWindowInput;
+    private final JTextField sellWindowInput;
+    private final JTextField moneyAvailableInput;
+    private final JTextField slotsAvaialbleInput;
+
+
     @Inject
-    public FlippingTablesPanel(@Nullable Client client, FlippingTablesPlugin plugin, FlippingTablesConfig config, ClientThread clientThread) {
+    public FlippingTablesPanel(FlippingTablesPlugin plugin, FlippingTablesConfig config, ClientThread clientThread) {
         this.plugin = plugin;
         this.config = config;
         this.clientThread = clientThread;
 
-        // The layout seems to be ignoring the top margin and only gives it
-        // a 2-3 pixel margin, so I set the value to 18 to compensate
-        // TODO: Figure out why this layout is ignoring most of the top margin
-        setBorder(new EmptyBorder(18, 10, 0, 10));
-        setBackground(ColorScheme.DARK_GRAY_COLOR);
-        setLayout(new GridBagLayout());
+        setLayout(new GridLayout(2, 2, 7, 7));
 
-        JButton calculateAdviceButton = new JButton();
-        calculateAdviceButton.setText("Calculate advice");
-        calculateAdviceButton.addActionListener(e -> new Thread(plugin::setupOffers).start());
+        buyWindowInput = addComponent("Buy window", 4);
+        sellWindowInput = addComponent("Sell window", 4);
+        moneyAvailableInput = addComponent("Money available", 1_000_000);
+        slotsAvaialbleInput = addComponent("Slots available", 8);
+
+        calculateAdviceButton = new JButton();
+        calculateAdviceButton.setText(CALCULATE_ADVICE_BUTTON_TEXT);
+        calculateAdviceButton.addActionListener(e -> new Thread(this::setupOffers).start());
         add(calculateAdviceButton);
     }
 
@@ -71,5 +83,56 @@ public class FlippingTablesPanel extends PluginPanel {
 
     public void shutdown() {
 
+    }
+
+    private JTextField addComponent(String label, int defaultValue) {
+        final JPanel container = new JPanel();
+        container.setLayout(new BorderLayout());
+
+        final JLabel uiLabel = new JLabel(label);
+        final FlatTextField uiInput = new FlatTextField();
+
+        uiInput.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+        uiInput.setHoverBackgroundColor(ColorScheme.DARK_GRAY_HOVER_COLOR);
+        uiInput.setBorder(new EmptyBorder(5, 7, 5, 7));
+        uiInput.setText(String.valueOf(defaultValue));
+
+        uiLabel.setFont(FontManager.getRunescapeSmallFont());
+        uiLabel.setBorder(new EmptyBorder(0, 0, 4, 0));
+        uiLabel.setForeground(Color.WHITE);
+
+        container.add(uiLabel, BorderLayout.NORTH);
+        container.add(uiInput, BorderLayout.CENTER);
+
+        add(container);
+
+        return uiInput.getTextField();
+    }
+
+    private void setupOffers() {
+        showLoading();
+        plugin.setupOffers(
+                getInput(slotsAvaialbleInput),
+                getInput(moneyAvailableInput),
+                getInput(buyWindowInput),
+                getInput(sellWindowInput)
+        );
+        hideLoading();
+    }
+
+    private void showLoading() {
+        calculateAdviceButton.setText(LOADING_BUTTON_TEXT);
+    }
+
+    private void hideLoading() {
+        calculateAdviceButton.setText(CALCULATE_ADVICE_BUTTON_TEXT);
+    }
+
+    private int getInput(JTextField field) {
+        try {
+            return Integer.parseInt(field.getText().replaceAll("\\D", ""));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 }

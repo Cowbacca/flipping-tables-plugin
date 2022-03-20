@@ -24,15 +24,15 @@
  */
 package com.dashery.flippingtables;
 
-import com.google.common.primitives.Shorts;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
-import net.runelite.api.FontID;
 import net.runelite.api.VarClientInt;
 import net.runelite.api.VarClientStr;
-import net.runelite.api.events.*;
-import net.runelite.api.widgets.*;
+import net.runelite.api.events.GrandExchangeSearched;
+import net.runelite.api.events.VarClientIntChanged;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -41,18 +41,13 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
-import okhttp3.OkHttpClient;
 
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.awt.image.BufferedImage;
 import java.time.temporal.ChronoUnit;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Optional;
-import java.util.stream.Collectors;
-
-import static net.runelite.api.VarPlayer.CURRENT_GE_ITEM;
 
 @PluginDescriptor(
         name = "Flipping Tables",
@@ -163,14 +158,14 @@ public class FlippingTablesPlugin extends Plugin {
         }
     }
 
-    public void setupOffers() {
+    public void setupOffers(int slotsAvailable, int moneyAvailable, int buyWindow, int sellWindow) {
         OfferAdvice offerAdvice = flippingTablesClient.requestOfferAdvice(
                 new OfferAdviceRequest(
-                        config.slotsAvailable(),
-                        config.moneyAvailable(),
+                        slotsAvailable,
+                        moneyAvailable,
                         new BuySellWindows(
-                                new SerializableDuration(ChronoUnit.HOURS, config.buyWindow()),
-                                new SerializableDuration(ChronoUnit.HOURS, config.sellWindow())
+                                new SerializableDuration(ChronoUnit.HOURS, buyWindow),
+                                new SerializableDuration(ChronoUnit.HOURS, sellWindow)
                         ),
                         new HashMap<>(),
                         config.members(),
