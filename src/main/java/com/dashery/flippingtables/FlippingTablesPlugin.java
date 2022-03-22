@@ -29,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.VarClientInt;
 import net.runelite.api.VarClientStr;
+import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.api.events.GrandExchangeSearched;
 import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.widgets.Widget;
@@ -46,7 +47,6 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import java.awt.image.BufferedImage;
 import java.time.temporal.ChronoUnit;
-import java.util.HashMap;
 import java.util.Optional;
 
 @PluginDescriptor(
@@ -59,6 +59,7 @@ import java.util.Optional;
 public class FlippingTablesPlugin extends Plugin {
 
     private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
+    private static final int GE_HISTORY_GROUP_ID = 383;
 
     @Inject
     @Nullable
@@ -83,6 +84,9 @@ public class FlippingTablesPlugin extends Plugin {
 
     @Inject
     private ClientThread clientThread;
+
+    @Inject
+    private GeLimitsTracker geLimitsTracker;
 
     @Inject
     public FlippingTablesPlugin() {
@@ -167,7 +171,7 @@ public class FlippingTablesPlugin extends Plugin {
                                 new SerializableDuration(ChronoUnit.HOURS, buyWindow),
                                 new SerializableDuration(ChronoUnit.HOURS, sellWindow)
                         ),
-                        new HashMap<>(),
+                        geLimitsTracker.getGeLimitsAlreadyUsed(),
                         config.members(),
                         60.0,
                         true
@@ -177,5 +181,10 @@ public class FlippingTablesPlugin extends Plugin {
         log.info("Found offer advice {}", offerAdvice);
 
         offerAdviceRepository.save(offerAdvice);
+    }
+
+    @Subscribe
+    public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerChangedEvent) {
+        geLimitsTracker.onGrandExchangeOfferChanged(offerChangedEvent);
     }
 }
