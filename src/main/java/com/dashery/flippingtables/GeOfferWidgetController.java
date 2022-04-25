@@ -8,7 +8,6 @@ import net.runelite.api.widgets.WidgetInfo;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
-
 import java.time.temporal.ChronoUnit;
 
 import static net.runelite.api.VarPlayer.CURRENT_GE_ITEM;
@@ -56,7 +55,7 @@ public class GeOfferWidgetController {
                     Sets.newHashSet(
                             new ItemToSell(
                                     client.getVar(CURRENT_GE_ITEM),
-                                    Integer.valueOf(quantityText)
+                                    Integer.parseInt(quantityText)
                             )
                     ),
                     new SerializableDuration(ChronoUnit.HOURS, config.sellWindow())

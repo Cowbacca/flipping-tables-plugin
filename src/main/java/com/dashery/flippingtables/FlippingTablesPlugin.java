@@ -31,6 +31,7 @@ import net.runelite.api.VarClientInt;
 import net.runelite.api.VarClientStr;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.api.events.GrandExchangeSearched;
+import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
@@ -60,6 +61,7 @@ public class FlippingTablesPlugin extends Plugin {
 
     private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
     private static final int GE_HISTORY_GROUP_ID = 383;
+    private static final int SEARCHBOX_LOADED = 750;
 
     @Inject
     @Nullable
@@ -87,6 +89,9 @@ public class FlippingTablesPlugin extends Plugin {
 
     @Inject
     private GeLimitsTracker geLimitsTracker;
+
+    @Inject
+    private GeSearchButton geSearchButton;
 
     @Inject
     public FlippingTablesPlugin() {
@@ -186,5 +191,12 @@ public class FlippingTablesPlugin extends Plugin {
     @Subscribe
     public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerChangedEvent) {
         geLimitsTracker.onGrandExchangeOfferChanged(offerChangedEvent);
+    }
+
+    @Subscribe
+    public void onScriptPostFired(ScriptPostFired event) {
+        if (event.getScriptId() == SEARCHBOX_LOADED) {
+            geSearchButton.init();
+        }
     }
 }
