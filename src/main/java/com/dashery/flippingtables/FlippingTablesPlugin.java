@@ -127,9 +127,9 @@ public class FlippingTablesPlugin extends Plugin {
     @Subscribe
     public void onVarClientIntChanged(VarClientIntChanged event) {
         Widget geWidget = client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER);
-        if (event.getIndex() == VarClientInt.INPUT_TYPE.getIndex()
+        if (event.getIndex() == VarClientInt.INPUT_TYPE
                 && geWidget != null
-                && client.getVarcIntValue(VarClientInt.INPUT_TYPE.getIndex()) == 7
+                && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 7
         ) {
             clientThread.invokeLater(() -> {
                 String chatInputText = client.getWidget(WidgetInfo.CHATBOX_TITLE).getText();
@@ -155,7 +155,7 @@ public class FlippingTablesPlugin extends Plugin {
 
     @Subscribe
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
-        final String input = client.getVar(VarClientStr.INPUT_TEXT);
+        final String input = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
         if (input.equals("ft")) {
             Optional<OfferAdvice> offerAdviceOptional = offerAdviceRepository.find();
             offerAdviceOptional.ifPresent(offerAdvice -> {

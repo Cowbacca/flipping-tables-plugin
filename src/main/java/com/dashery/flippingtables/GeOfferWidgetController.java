@@ -28,7 +28,7 @@ public class GeOfferWidgetController {
                         "Set price to " + price,
                         ev -> {
                             client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(price + "*");
-                            client.setVar(VarClientStr.INPUT_TEXT, String.valueOf(price));
+                            client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(price));
                         }
                 ));
     }
@@ -40,7 +40,7 @@ public class GeOfferWidgetController {
                         "Set quantity to " + quantity,
                         ev -> {
                             client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(quantity + "*");
-                            client.setVar(VarClientStr.INPUT_TEXT, String.valueOf(quantity));
+                            client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(quantity));
                         }
                 ));
     }
@@ -67,7 +67,7 @@ public class GeOfferWidgetController {
                     "Set price to " + price,
                     ev -> {
                         client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(price + "*");
-                        client.setVar(VarClientStr.INPUT_TEXT, String.valueOf(price));
+                        client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(price));
                     }
             );
         }).start();

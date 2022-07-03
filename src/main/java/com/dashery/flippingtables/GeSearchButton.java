@@ -40,8 +40,8 @@ public class GeSearchButton {
     }
 
     private void updateSearchBox() {
-        client.setVar(VarClientStr.INPUT_TEXT, showFlippingTablesResults ? "ft" : "");
-        client.setVar(VarClientInt.INPUT_TYPE, 14);
+        client.setVarcStrValue(VarClientStr.INPUT_TEXT, showFlippingTablesResults ? "ft" : "");
+        client.setVarcIntValue(VarClientInt.INPUT_TYPE, 14);
 
         Widget geSearchBox = client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT);
         if (geSearchBox == null) {
