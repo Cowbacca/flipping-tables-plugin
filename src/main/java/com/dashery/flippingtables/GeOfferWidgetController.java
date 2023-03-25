@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import net.runelite.api.Client;
 import net.runelite.api.VarClientStr;
 import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.client.callback.ClientThread;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -20,21 +21,27 @@ public class GeOfferWidgetController {
     private final Client client;
     private final WidgetCreator widgetCreator;
     private final FlippingTablesConfig config;
+    private final ClientThread clientThread;
 
     public void handleBuyPriceWidgetOpened() {
-        offerAdviceService.findPriceForItem(client.getVar(CURRENT_GE_ITEM)).ifPresent(price ->
-                widgetCreator.createChildWidget(
-                        WidgetInfo.CHATBOX_CONTAINER,
-                        "Set price to " + price,
-                        ev -> {
-                            client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(price + "*");
-                            client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(price));
-                        }
-                ));
+        clientThread.invokeLater(() -> {
+                    int varbitValue = client.getVarpValue(CURRENT_GE_ITEM);
+                    offerAdviceService.findPriceForItem(varbitValue).ifPresent(price ->
+                            widgetCreator.createChildWidget(
+                                    WidgetInfo.CHATBOX_CONTAINER,
+                                    "Set price to " + price,
+                                    ev -> {
+                                        client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT).setText(price + "*");
+                                        client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(price));
+                                    }
+                            ));
+                }
+        );
+
     }
 
     public void handleBuyQuantityWidgetOpened() {
-        offerAdviceService.findQuantityForItem(client.getVar(CURRENT_GE_ITEM)).ifPresent(quantity ->
+        offerAdviceService.findQuantityForItem(client.getVarpValue(CURRENT_GE_ITEM)).ifPresent(quantity ->
                 widgetCreator.createChildWidget(
                         WidgetInfo.CHATBOX_CONTAINER,
                         "Set quantity to " + quantity,
@@ -46,7 +53,7 @@ public class GeOfferWidgetController {
     }
 
     public void handleSellPriceWidgetOpened() {
-        new Thread(() -> {
+        clientThread.invokeLater(() -> {
             String quantityText = client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER)
                     .getChild(32)
                     .getText();
@@ -54,7 +61,7 @@ public class GeOfferWidgetController {
             SellAdvice sellAdvice = flippingTablesClient.getSellAdvice(new SellAdviceRequest(
                     Sets.newHashSet(
                             new ItemToSell(
-                                    client.getVar(CURRENT_GE_ITEM),
+                                    client.getVarpValue(CURRENT_GE_ITEM),
                                     Integer.parseInt(quantityText)
                             )
                     ),
@@ -70,6 +77,6 @@ public class GeOfferWidgetController {
                         client.setVarcStrValue(VarClientStr.INPUT_TEXT, String.valueOf(price));
                     }
             );
-        }).start();
+        });
     }
 }
