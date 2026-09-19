@@ -56,6 +56,29 @@ public class FlippingTablesClientTest
 	}
 
 	@Test
+	public void showsValidationDetailsAndRetainsStatusForUnreadableErrors() throws Exception
+	{
+		assertErrorResponse("{\"error\":\"sell offers exceed inventory\"}", "HTTP 400): sell offers exceed inventory");
+		assertErrorResponse("{\"detail\":\"Invalid portfolio\"}", "HTTP 400): Invalid portfolio");
+		assertErrorResponse("not json", "Portfolio advice request failed (HTTP 400)");
+		assertErrorResponse("{\"error\":123}", "Portfolio advice request failed (HTTP 400)");
+		assertErrorResponse("{\"error\":\"" + repeated('x', 1001) + "\"}", "Portfolio advice request failed (HTTP 400)");
+	}
+
+	private void assertErrorResponse(String response, String expectedMessage) throws Exception
+	{
+		HttpServer server = server(new FixedResponseHandler(400, response, new AtomicReference<>(), new AtomicReference<>()));
+		try
+		{
+			assertTrue(expectIo(() -> client(server, "/api").requestPortfolioAdvice(request(), "token")).endsWith(expectedMessage));
+		}
+		finally
+		{
+			server.stop(0);
+		}
+	}
+
+	@Test
 	public void rejectsRedirectInsteadOfFollowingIt() throws Exception
 	{
 		AtomicInteger requests = new AtomicInteger();

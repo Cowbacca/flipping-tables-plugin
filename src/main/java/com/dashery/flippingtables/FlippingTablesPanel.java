@@ -77,10 +77,10 @@ public class FlippingTablesPanel extends PluginPanel {
         add(consent);
         add(Box.createVerticalStrut(8));
         add(read);
-        add(status);
         add(stocks);
         add(Box.createVerticalStrut(8));
         add(calculate);
+        add(status);
         add(results);
         calculate.setEnabled(false);
         consent.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -199,6 +199,7 @@ public class FlippingTablesPanel extends PluginPanel {
     public void showError(String message) {
         status.setText(message == null ? "Unable to get advice. Try reading your portfolio again." : message);
         setBusy(false);
+        refresh();
     }
 
     public void setBusy(boolean busy) {

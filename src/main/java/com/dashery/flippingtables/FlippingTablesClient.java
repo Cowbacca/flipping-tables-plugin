@@ -79,7 +79,7 @@ public class FlippingTablesClient
 		{
 			if (!response.isSuccessful())
 			{
-				throw httpFailure(response.code());
+				throw httpFailure(response);
 			}
 			return parse(readBody(response.body()));
 		}
@@ -335,6 +335,36 @@ public class FlippingTablesClient
 		{
 			throw new IOException("Advice response has an invalid " + field, error);
 		}
+	}
+
+	private IOException httpFailure(Response response)
+	{
+		IOException failure = httpFailure(response.code());
+		if (response.code() != 400 && response.code() != 422)
+		{
+			return failure;
+		}
+		try
+		{
+			JsonObject body = new JsonParser().parse(readBody(response.body())).getAsJsonObject();
+			for (String field : Arrays.asList("detail", "message", "error"))
+			{
+				JsonElement value = body.get(field);
+				if (value != null && value.isJsonPrimitive() && value.getAsJsonPrimitive().isString())
+				{
+					String detail = value.getAsString().trim();
+					if (!detail.isEmpty() && detail.length() <= MAX_TEXT)
+					{
+						return new IOException(failure.getMessage() + ": " + detail);
+					}
+				}
+			}
+		}
+		catch (IOException | RuntimeException error)
+		{
+			return failure;
+		}
+		return failure;
 	}
 
 	private IOException httpFailure(int status)

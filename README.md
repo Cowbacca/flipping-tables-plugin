@@ -6,7 +6,7 @@ A personal RuneLite client with a sidebar for the Flipping Tables portfolio API.
 
 - RuneLite client **1.12.39**, pinned for reproducible compatibility testing.
 - RuneLite Windows launcher **2.8.0**, including Java 17; plugin bytecode targets Java 11.
-- Gradle **8.10**; Flipping Tables plugin **2.0.0**.
+- Gradle **8.10**; Flipping Tables plugin **2.0.1**.
 - API: `https://flippingtables.91-98-161-245.sslip.io/api/portfolio-snapshots/advice`.
 
 The standard RuneLite launcher and this personal development client are separate launch paths. Updating the normal launcher does not rebuild this bundled plugin client. Future RuneLite updates should be tested and the pinned `runeLiteVersion` updated before rebuilding.
@@ -19,7 +19,7 @@ $env:JAVA_HOME = 'C:/path/to/your/jdk-11-or-17'
 .\scripts\Start-FlippingTables.ps1
 ```
 
-Building requires a full JDK 11 or 17. The output is `build/libs/flippingtables-2.0.0-all.jar`. The startup script uses the current RuneLite installation's bundled Java runtime and enables assertions, as required for developer plugins. `-CheckOnly` validates its launcher without opening the game. `gradlew run` is also available for development. The bundled JAR contains the launcher entry point, plugin and RuneLite runtime dependencies; regression tests and their dependencies are excluded.
+Building requires a full JDK 11 or 17. The output is `build/libs/flippingtables-2.0.1-all.jar`. The startup script uses the current RuneLite installation's bundled Java runtime and enables assertions, as required for developer plugins. `-CheckOnly` validates its launcher without opening the game. `gradlew run` is also available for development. The bundled JAR contains the launcher entry point, plugin and RuneLite runtime dependencies; regression tests and their dependencies are excluded.
 
 Paste the API token into the sidebar. It remains in memory and is cleared when the plugin shuts down. For your own PC, the startup script can read an existing restricted access file with `-ApiAccessFile <path>`; it passes the token through the child process environment without printing it or embedding it in the JAR, command line or RuneLite settings. Keep that access file out of source control. The API address is configurable in the plugin settings; changing it clears the token and consent in the current session.
 

@@ -37,6 +37,8 @@ public final class PanelPreview {
                         Collections.emptyMap(), 1000, java.time.Duration.ofHours(4), 10).getSnapshot());
                 panel.showAdvice(response, Collections.singletonMap(1515L, "Yew logs"));
                 render(panel, output.resolve("advice.png"));
+                panel.showError("Portfolio advice request failed (HTTP 400). Review your inputs and try again.");
+                render(panel, output.resolve("error.png"));
                 panel.shutdown();
             } catch (Exception error) {
                 throw new RuntimeException(error);
