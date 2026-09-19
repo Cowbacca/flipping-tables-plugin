@@ -1,6 +1,6 @@
 package com.dashery.flippingtables;
 
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
@@ -12,17 +12,30 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 @Singleton
-@AllArgsConstructor(onConstructor = @__({ @Inject}))
+@RequiredArgsConstructor(onConstructor = @__({ @Inject}))
 @Slf4j
 public class WidgetCreator {
     private final Client client;
     private final ClientThread clientThread;
+    private Widget previousSuggestion;
+
+    public void clearSuggestion() {
+        if (previousSuggestion != null) {
+            previousSuggestion.setHidden(true);
+            previousSuggestion = null;
+        }
+    }
 
     public void createChildWidget(WidgetInfo parent, String text, JavaScriptCallback onClick) {
         log.info("Creating child widget with text {}", text);
         clientThread.invokeLater(() -> {
             Widget widget = client.getWidget(parent);
+            clearSuggestion();
+            if (widget == null) {
+                return;
+            }
             Widget childWidget = widget.createChild(-1, WidgetType.TEXT);
+            previousSuggestion = childWidget;
             childWidget.setText(text);
             childWidget.setTextColor(0x800000);
             childWidget.setFontId(FontID.QUILL_8);

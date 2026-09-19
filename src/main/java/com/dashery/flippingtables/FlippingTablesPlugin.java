@@ -25,12 +25,16 @@
 package com.dashery.flippingtables;
 
 import com.google.inject.Provides;
-import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.GameState;
+import net.runelite.api.InventoryID;
 import net.runelite.api.VarClientInt;
 import net.runelite.api.VarClientStr;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.api.events.GrandExchangeSearched;
+import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
 import net.runelite.api.widgets.Widget;
@@ -38,64 +42,48 @@ import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
 
-import javax.annotation.Nullable;
 import javax.inject.Inject;
-import java.awt.image.BufferedImage;
-import java.time.temporal.ChronoUnit;
-import java.util.Optional;
+import javax.swing.SwingUtilities;
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 @PluginDescriptor(
         name = "Flipping Tables",
-        description = "Enable the Flipping Tables blah blah",
-        tags = {"panel", "players"},
-        loadWhenOutdated = true
+        description = "Plan your next Grand Exchange visit using portfolio advice",
+        tags = {"grand exchange", "flipping", "trading"}
 )
-@Slf4j
 public class FlippingTablesPlugin extends Plugin {
+    @Inject private Client client;
+    @Inject private ClientToolbar clientToolbar;
+    @Inject private FlippingTablesConfig config;
+    @Inject private FlippingTablesClient api;
+    @Inject private PortfolioCaptureService captureService;
+    @Inject private PortfolioAdviceRepository repository;
+    @Inject private GeOfferWidgetController geOfferWidgetController;
+    @Inject private ClientThread clientThread;
+    @Inject private ItemManager itemManager;
+    @Inject private GeLimitsTracker geLimitsTracker;
+    @Inject private GeSearchButton geSearchButton;
 
-    private static final int GE_OFFER_INIT_STATE_CHILD_ID = 18;
-    private static final int GE_HISTORY_GROUP_ID = 383;
-    private static final int SEARCHBOX_LOADED = 750;
-
-    @Inject
-    @Nullable
-    private Client client;
-
-    @Inject
-    private ClientToolbar clientToolbar;
-
-    @Inject
-    private FlippingTablesConfig config;
-
-    private NavigationButton navButton;
-    private FlippingTablesPanel flippingTablesPanel;
-
-    @Inject
-    private FlippingTablesClient flippingTablesClient;
-    @Inject
-    private OfferAdviceRepository offerAdviceRepository;
-
-    @Inject
-    private GeOfferWidgetController geOfferWidgetController;
-
-    @Inject
-    private ClientThread clientThread;
-
-    @Inject
-    private GeLimitsTracker geLimitsTracker;
-
-    @Inject
-    private GeSearchButton geSearchButton;
-
-    @Inject
-    public FlippingTablesPlugin() {
-    }
+    private final AtomicLong generation = new AtomicLong();
+    private NavigationButton navigation;
+    private FlippingTablesPanel panel;
+    private ExecutorService worker;
+    private volatile CapturedPortfolio lastCapture;
+    private volatile boolean running;
 
     @Provides
     FlippingTablesConfig provideConfig(ConfigManager configManager) {
@@ -104,50 +92,160 @@ public class FlippingTablesPlugin extends Plugin {
 
     @Override
     protected void startUp() {
-        flippingTablesPanel = injector.getInstance(FlippingTablesPanel.class);
-
-        final BufferedImage icon = ImageUtil.loadImageResource(getClass(), "/icon.png");
-
-        navButton = NavigationButton.builder()
-                .tooltip("Flipping Tables")
-                .icon(icon)
-                .priority(5)
-                .panel(flippingTablesPanel)
-                .build();
-
-        clientToolbar.addNavigation(navButton);
+        running = true;
+        worker = Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, "flipping-tables-api");
+            thread.setDaemon(true);
+            return thread;
+        });
+        SwingUtilities.invokeLater(() -> {
+            if (!running) {
+                return;
+            }
+            panel = injector.getInstance(FlippingTablesPanel.class);
+            navigation = NavigationButton.builder()
+                    .tooltip("Flipping Tables")
+                    .icon(ImageUtil.loadImageResource(getClass(), "/icon.png"))
+                    .priority(5).panel(panel).build();
+            clientToolbar.addNavigation(navigation);
+        });
     }
 
     @Override
     protected void shutDown() {
-        flippingTablesPanel.shutdown();
-        clientToolbar.removeNavigation(navButton);
+        running = false;
+        generation.incrementAndGet();
+        api.cancelPendingRequest();
+        repository.clear();
+        lastCapture = null;
+        geSearchButton.reset();
+        geLimitsTracker.resetSession();
+        if (worker != null) {
+            worker.shutdownNow();
+        }
+        SwingUtilities.invokeLater(() -> {
+            if (panel != null) {
+                panel.shutdown();
+                panel = null;
+            }
+            if (navigation != null) {
+                clientToolbar.removeNavigation(navigation);
+                navigation = null;
+            }
+        });
+    }
+
+    public void readPortfolio() {
+        invalidate(null, true);
+        long requestGeneration = generation.get();
+        panel.setBusy(true);
+        clientThread.invokeLater(() -> {
+            try {
+                CapturedPortfolio captured = captureService.capture();
+                if (isCurrent(requestGeneration)) {
+                    lastCapture = captured;
+                    onPanel(requestGeneration, () -> panel.displayPortfolio(captured));
+                }
+            } catch (RuntimeException error) {
+                onPanel(requestGeneration, () -> panel.showError(error.getMessage()));
+            }
+        });
+    }
+
+    public void requestAdvice(CapturedPortfolio displayed, Set<Long> selected, Map<Long, Long> costs,
+            long cashBudget, Duration interval, String token) {
+        invalidate(null, false);
+        long requestGeneration = generation.get();
+        panel.setBusy(true);
+        clientThread.invokeLater(() -> {
+            try {
+                CapturedPortfolio captured = captureService.capture();
+                if (!captured.getFingerprint().equals(displayed.getFingerprint())) {
+                    throw new IllegalStateException("Your portfolio changed. Read it again before requesting advice.");
+                }
+                PortfolioModels.AdviceRequest request = PortfolioRequestBuilder.create(
+                        captured, selected, costs, cashBudget, interval, config.volumeParticipationPercent());
+                lastCapture = captured;
+                worker.submit(() -> {
+                    if (!isCurrent(requestGeneration)) {
+                        return;
+                    }
+                    try {
+                        PortfolioModels.AdviceResponse response = api.requestPortfolioAdvice(request, token);
+                        clientThread.invokeLater(() -> acceptAdvice(requestGeneration, captured, request, response));
+                    } catch (Exception error) {
+                        onPanel(requestGeneration, () -> panel.showError(error.getMessage()));
+                    }
+                });
+            } catch (RuntimeException error) {
+                onPanel(requestGeneration, () -> panel.showError(error.getMessage()));
+            }
+        });
+    }
+
+    public void inputsChanged() {
+        invalidate("Inputs changed. Request advice again when ready.", false);
+    }
+
+    private void acceptAdvice(long requestGeneration, CapturedPortfolio captured,
+            PortfolioModels.AdviceRequest request, PortfolioModels.AdviceResponse response) {
+        if (!isCurrent(requestGeneration)) {
+            return;
+        }
+        try {
+            if (!captureService.capture().getFingerprint().equals(captured.getFingerprint())) {
+                invalidate("Your portfolio changed while advice was loading. Read it again.", true);
+                return;
+            }
+            Map<Long, String> names = new HashMap<>();
+            for (PortfolioModels.Action action : response.getAdvice().getActions()) {
+                names.put(action.getItemId(), itemManager.getItemComposition(Math.toIntExact(action.getItemId())).getName());
+            }
+            repository.save(response, request.getSnapshot());
+            onPanel(requestGeneration, () -> panel.showAdvice(response, names));
+        } catch (RuntimeException error) {
+            invalidate("Unable to verify this portfolio. Read it again before using advice.", true);
+        }
     }
 
     @Subscribe
-    public void onVarClientIntChanged(VarClientIntChanged event) {
-        Widget geWidget = client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER);
-        if (event.getIndex() == VarClientInt.INPUT_TYPE
-                && geWidget != null
-                && client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 7
-        ) {
-            clientThread.invokeLater(() -> {
-                String chatInputText = client.getWidget(WidgetInfo.CHATBOX_TITLE).getText();
-                if (chatInputText.equals("How many do you wish to buy?")) {
-                    geOfferWidgetController.handleBuyQuantityWidgetOpened();
-                } else {
-                    String offerText = geWidget
-                            .getChild(GE_OFFER_INIT_STATE_CHILD_ID)
-                            .getText();
+    public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged event) {
+        geLimitsTracker.onGrandExchangeOfferChanged(event);
+        invalidateIfPortfolioChanged();
+    }
 
-                    switch (offerText) {
-                        case "Buy offer":
-                            geOfferWidgetController.handleBuyPriceWidgetOpened();
-                            break;
-                        case "Sell offer":
-                            geOfferWidgetController.handleSellPriceWidgetOpened();
-                            break;
-                    }
+    @Subscribe
+    public void onItemContainerChanged(ItemContainerChanged event) {
+        if (event.getContainerId() == InventoryID.INVENTORY.getId()) {
+            invalidateIfPortfolioChanged();
+        }
+    }
+
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged event) {
+        if (event.getGameState() == GameState.LOGIN_SCREEN) {
+            geLimitsTracker.resetSession();
+        }
+        if (event.getGameState() != GameState.LOGGED_IN) {
+            invalidate("Read your portfolio after logging in or returning to the game.", true);
+            geSearchButton.reset();
+        }
+    }
+
+    @Subscribe
+    public void onGameTick(GameTick event) {
+        if (repository.isExpired()) {
+            invalidate("Advice is five minutes old. Request a fresh plan.", false);
+        }
+    }
+
+    @Subscribe
+    public void onConfigChanged(ConfigChanged event) {
+        if ("flippingtables".equals(event.getGroup())) {
+            invalidate("Configuration changed. Request a fresh plan.", false);
+            SwingUtilities.invokeLater(() -> {
+                if (panel != null) {
+                    panel.configurationChanged("apiBaseUrl".equals(event.getKey()));
                 }
             });
         }
@@ -155,48 +253,99 @@ public class FlippingTablesPlugin extends Plugin {
 
     @Subscribe
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
-        final String input = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
-        if (input.equals("ft")) {
-            Optional<OfferAdvice> offerAdviceOptional = offerAdviceRepository.find();
-            offerAdviceOptional.ifPresent(offerAdvice -> {
+        if ("ft".equals(client.getVarcStrValue(VarClientStr.INPUT_TEXT))) {
+            short[] ids = repository.buyItemIds();
+            if (ids.length > 0) {
                 client.setGeSearchResultIndex(0);
-                client.setGeSearchResultCount(offerAdvice.getNumberOfOffers());
-                client.setGeSearchResultIds(offerAdvice.getItemIds());
+                client.setGeSearchResultCount(ids.length);
+                client.setGeSearchResultIds(ids);
                 event.consume();
-            });
+            }
         }
     }
 
-    public void setupOffers(int slotsAvailable, int moneyAvailable, int buyWindow, int sellWindow) {
-        OfferAdvice offerAdvice = flippingTablesClient.requestOfferAdvice(
-                new OfferAdviceRequest(
-                        slotsAvailable,
-                        moneyAvailable,
-                        new BuySellWindows(
-                                new SerializableDuration(ChronoUnit.HOURS, buyWindow),
-                                new SerializableDuration(ChronoUnit.HOURS, sellWindow)
-                        ),
-                        geLimitsTracker.getGeLimitsAlreadyUsed(),
-                        config.members(),
-                        60.0,
-                        true
-                )
-        );
-
-        log.info("Found offer advice {}", offerAdvice);
-
-        offerAdviceRepository.save(offerAdvice);
-    }
-
     @Subscribe
-    public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged offerChangedEvent) {
-        geLimitsTracker.onGrandExchangeOfferChanged(offerChangedEvent);
+    public void onVarClientIntChanged(VarClientIntChanged event) {
+        if (event.getIndex() != VarClientInt.INPUT_TYPE) {
+            return;
+        }
+        geOfferWidgetController.clearSuggestion();
+        if (client.getVarcIntValue(VarClientInt.INPUT_TYPE) != 7) {
+            return;
+        }
+        Widget offer = client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER);
+        Widget title = client.getWidget(WidgetInfo.CHATBOX_TITLE);
+        if (offer == null || title == null) {
+            return;
+        }
+        Widget heading = offer.getChild(18);
+        if (heading == null || title.getText() == null) {
+            return;
+        }
+        if (title.getText().startsWith("How many")) {
+            if ("Buy offer".equals(heading.getText())) {
+                geOfferWidgetController.handleBuyQuantityWidgetOpened();
+            } else if ("Sell offer".equals(heading.getText())) {
+                geOfferWidgetController.handleSellQuantityWidgetOpened();
+            }
+        } else if (title.getText().toLowerCase(java.util.Locale.ROOT).contains("price")) {
+            if ("Buy offer".equals(heading.getText())) {
+                geOfferWidgetController.handleBuyPriceWidgetOpened();
+            } else if ("Sell offer".equals(heading.getText())) {
+                geOfferWidgetController.handleSellPriceWidgetOpened();
+            }
+        }
     }
 
     @Subscribe
     public void onScriptPostFired(ScriptPostFired event) {
-        if (event.getScriptId() == SEARCHBOX_LOADED) {
+        if (event.getScriptId() == 750) {
             geSearchButton.init();
         }
+    }
+
+    private void invalidateIfPortfolioChanged() {
+        CapturedPortfolio previous = lastCapture;
+        if (previous == null) {
+            return;
+        }
+        try {
+            if (!captureService.capture().getFingerprint().equals(previous.getFingerprint())) {
+                invalidate("Inventory or offers changed. Read your portfolio again.", true);
+            }
+        } catch (RuntimeException error) {
+            invalidate(error.getMessage(), true);
+        }
+    }
+
+    private void invalidate(String message, boolean clearPortfolio) {
+        long changedGeneration = generation.incrementAndGet();
+        api.cancelPendingRequest();
+        repository.clear();
+        if (clearPortfolio) {
+            lastCapture = null;
+        }
+        Runnable update = () -> {
+            if (panel != null && generation.get() == changedGeneration) {
+                panel.invalidateAdvice(message, clearPortfolio);
+            }
+        };
+        if (SwingUtilities.isEventDispatchThread()) {
+            update.run();
+        } else {
+            SwingUtilities.invokeLater(update);
+        }
+    }
+
+    private boolean isCurrent(long requestGeneration) {
+        return running && generation.get() == requestGeneration;
+    }
+
+    private void onPanel(long requestGeneration, Runnable operation) {
+        SwingUtilities.invokeLater(() -> {
+            if (isCurrent(requestGeneration) && panel != null) {
+                operation.run();
+            }
+        });
     }
 }

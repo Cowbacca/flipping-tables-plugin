@@ -33,56 +33,35 @@ public interface FlippingTablesConfig extends Config
 {
 	@ConfigItem(
 		position = 1,
-		keyName = "buyWindow",
-		name = "Buy window",
-		description = "Buy window time"
+		keyName = "apiBaseUrl",
+		name = "API address",
+		description = "HTTPS service receiving the portfolio when you request advice"
 	)
-	default int buyWindow()
+	default String apiBaseUrl()
 	{
-		return 8;
+		return "https://flippingtables.91-98-161-245.sslip.io/api";
 	}
 
 	@ConfigItem(
 			position = 2,
-			keyName = "sellWindow",
-			name = "Sell window",
-			description = "Sell window time"
+			keyName = "nextVisitHours",
+			name = "Hours until next visit",
+			description = "Default time until your next Grand Exchange visit, from 1 to 168 hours"
 	)
-	default int sellWindow()
+	default int nextVisitHours()
 	{
-		return 8;
+		return 4;
 	}
 
 	@ConfigItem(
 			position = 3,
-			keyName = "moneyAvailable",
-			name = "Money available",
-			description = "Money available for flipping"
+			keyName = "volumeParticipationPercent",
+			name = "Volume participation (%)",
+			description = "Conservative share of observed trade volume used for estimates, from 1 to 100"
 	)
-	default int moneyAvailable()
+	default int volumeParticipationPercent()
 	{
-		return 1;
+		return 10;
 	}
 
-	@ConfigItem(
-			position = 4,
-			keyName = "slotsAvailable",
-			name = "Slots available",
-			description = "Slots available for flipping"
-	)
-	default int slotsAvailable()
-	{
-		return 8;
-	}
-
-	@ConfigItem(
-			position = 5,
-			keyName = "members",
-			name = "Members",
-			description = "Ye be a member be ye?"
-	)
-	default boolean members()
-	{
-		return true;
-	}
 }

@@ -1,6 +1,6 @@
 package com.dashery.flippingtables;
 
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import net.runelite.api.Client;
 import net.runelite.api.SpriteID;
 import net.runelite.api.VarClientInt;
@@ -15,14 +15,19 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 @Singleton
-@AllArgsConstructor(onConstructor = @__({@Inject}))
+@RequiredArgsConstructor(onConstructor = @__({@Inject}))
 public class GeSearchButton {
-    private static boolean showFlippingTablesResults = false;
+    private boolean showFlippingTablesResults = false;
+    private Widget previousContainer;
     private final Client client;
     private final ClientThread clientThread;
 
     public void init() {
         Widget container = client.getWidget(WidgetInfo.CHATBOX_CONTAINER);
+        if (container == null || container == previousContainer) {
+            return;
+        }
+        previousContainer = container;
         Widget widget = container.createChild(-1, WidgetType.GRAPHIC);
         widget.setOriginalWidth(20);
         widget.setOriginalHeight(20);
@@ -60,5 +65,10 @@ public class GeSearchButton {
     private void toggleFlippingTablesResults() {
         showFlippingTablesResults = !showFlippingTablesResults;
         updateSearchBox();
+    }
+
+    public void reset() {
+        showFlippingTablesResults = false;
+        previousContainer = null;
     }
 }
