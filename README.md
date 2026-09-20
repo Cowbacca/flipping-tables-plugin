@@ -6,7 +6,7 @@ A personal RuneLite client with a sidebar for the Flipping Tables portfolio API.
 
 - RuneLite client **1.12.39**, pinned for reproducible compatibility testing.
 - RuneLite Windows launcher **2.8.0**, including Java 17; plugin bytecode targets Java 11.
-- Gradle **8.10**; Flipping Tables plugin **2.0.2**.
+- Gradle **8.10**; Flipping Tables plugin **2.0.3**.
 - API: `https://flippingtables.91-98-161-245.sslip.io/api/portfolio-snapshots/advice`.
 
 The standard RuneLite launcher and this personal development client are separate launch paths. Updating the normal launcher does not rebuild this bundled plugin client. Future RuneLite updates should be tested and the pinned `runeLiteVersion` updated before rebuilding.
@@ -19,7 +19,7 @@ $env:JAVA_HOME = 'C:/path/to/your/jdk-11-or-17'
 .\scripts\Install-PersonalClient.ps1 -ApiAccessFile 'C:/path/to/restricted/api-access.env'
 ```
 
-Building requires a full JDK 11 or 17. The output is `build/libs/flippingtables-2.0.2-all.jar`. From a development shell that permits local build scripts, the installer compiles the small Windows launcher using the .NET Framework compiler already present on Windows, copies the built client into `%LOCALAPPDATA%/FlippingTables`, and creates **Flipping Tables (RuneLite)** in the Start menu. Close the personal client before reinstalling. The API access file is optional; omitting it preserves an existing shortcut's access-file path when available.
+Building requires a full JDK 11 or 17. The output is `build/libs/flippingtables-2.0.3-all.jar`. From a development shell that permits local build scripts, the installer compiles the small Windows launcher using the .NET Framework compiler already present on Windows, copies the built client into `%LOCALAPPDATA%/FlippingTables`, and creates **Flipping Tables (RuneLite)** in the Start menu. Close the personal client before reinstalling. The API access file is optional; omitting it preserves an existing shortcut's access-file path when available.
 
 Normal launches use `FlippingTables.exe` directly and do not invoke PowerShell or change its execution policy. The native launcher reads `client-version.txt`, uses the official RuneLite installation's bundled Java runtime, and enables assertions. It shows a persistent error message on failure and records startup output in capped logs under the installed `logs` directory. `FlippingTables.exe --check` validates the installed Java/JAR entry point without opening the game; a successful check is not a substitute for verifying full client initialization. `gradlew run` and `scripts/Start-FlippingTables.ps1 -CheckOnly` remain available for development. The bundled JAR contains the launcher entry point, plugin and RuneLite runtime dependencies; regression tests and their dependencies are excluded.
 
