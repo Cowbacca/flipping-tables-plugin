@@ -59,6 +59,8 @@ public class FlippingTablesPanel extends PluginPanel {
     private final JPanel results = column();
     private final List<StockInput> stockInputs = new ArrayList<>();
     private CapturedPortfolio captured;
+    private PortfolioModels.AdviceResponse displayedAdvice;
+    private Map<Long, String> itemNames = new HashMap<>();
     private boolean updating;
 
     @Inject
@@ -135,11 +137,14 @@ public class FlippingTablesPanel extends PluginPanel {
     }
 
     public void showAdvice(PortfolioModels.AdviceResponse response, Map<Long, String> names) {
+        displayedAdvice = response;
+        itemNames = new HashMap<>(names);
         results.removeAll();
         PortfolioModels.Advice advice = response.getAdvice();
         status.setText("Advice ready. Market data through " + response.getMarketDataThrough() + ".");
         results.add(text("Estimated cash committed: " + advice.getProjectedCashCommitted() + " GP. Inventory value estimate: " + advice.getConservativeInventoryValue() + " GP. These are estimates, not realised profit."));
-        results.add(text("Review cancellations first. After changing an offer, read your portfolio and plan again."));
+        results.add(text("Search ft or click the coins button in GE search. Choose an item, then open its quantity or price entry and click Use suggested. Press Enter, then review and confirm the offer normally."));
+        results.add(text("Exact suggested new offers are marked Placed; continue with the remaining items. After cancelling, repricing, collecting or changing an offer differently, read your portfolio and plan again."));
         if ("SEARCH_LIMIT_REACHED".equals(advice.getSearchStatus())) {
             results.add(text("The planner reached its search limit; this is its best result so far."));
         }
@@ -147,19 +152,20 @@ public class FlippingTablesPanel extends PluginPanel {
             results.add(text("No suitable actions found for this portfolio and current market data."));
         }
         for (PortfolioModels.Action action : advice.getActions()) {
+            boolean placed = repository.isCompleted(action);
             JPanel card = column();
             card.setBorder(new EmptyBorder(10, 0, 10, 0));
             String side = repository.sideOf(action);
             String actionLabel = action.getType().startsWith("CREATE_") ? "New " + side.toLowerCase(java.util.Locale.ROOT)
                     : action.getType().toLowerCase(java.util.Locale.ROOT) + " " + side.toLowerCase(java.util.Locale.ROOT);
-            card.add(text(actionLabel + " - " + names.getOrDefault(action.getItemId(), "Item " + action.getItemId())));
+            card.add(text((placed ? "Placed: " : "") + actionLabel + " - " + names.getOrDefault(action.getItemId(), "Item " + action.getItemId())));
             card.add(text(action.getQuantity() + " at " + action.getPricePerItem() + " GP each" + slotLabel(action.getReplacesOfferId())));
-            if (action.getType().startsWith("CREATE_")) {
+            if (!placed && action.getType().startsWith("CREATE_")) {
                 JButton choose = new JButton("Use this suggestion");
                 choose.addActionListener(event -> {
                     try {
                         repository.select(action);
-                        status.setText("Selected suggestion. Open the matching GE offer, then click its price or quantity helper. Search ft for suggested buys.");
+                        status.setText("Selected suggestion. Open the matching GE offer, click its quantity or price entry, then Use suggested. Press Enter to accept the number.");
                     } catch (RuntimeException error) {
                         showError(error.getMessage());
                     }
@@ -167,7 +173,11 @@ public class FlippingTablesPanel extends PluginPanel {
                 choose.setAlignmentX(Component.LEFT_ALIGNMENT);
                 card.add(choose);
             }
-            if (!"KEEP".equals(action.getType()) && !"CANCEL".equals(action.getType())) {
+            if (!placed && !"KEEP".equals(action.getType()) && !"CANCEL".equals(action.getType())) {
+                JButton copyQuantity = new JButton("Copy quantity");
+                copyQuantity.addActionListener(event -> copy(Long.toString(action.getQuantity())));
+                copyQuantity.setAlignmentX(Component.LEFT_ALIGNMENT);
+                card.add(copyQuantity);
                 JButton copyPrice = new JButton("Copy price");
                 copyPrice.addActionListener(event -> copy(Long.toString(action.getPricePerItem())));
                 copyPrice.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -182,8 +192,21 @@ public class FlippingTablesPanel extends PluginPanel {
         refresh();
     }
 
+    public void showPlanProgress() {
+        if (displayedAdvice == null) {
+            return;
+        }
+        captured = null;
+        stocks.removeAll();
+        stockInputs.clear();
+        showAdvice(displayedAdvice, itemNames);
+        status.setText("Plan progress updated. Continue the remaining suggestions, or read your portfolio to replan.");
+    }
+
     public void invalidateAdvice(String message, boolean clearPortfolio) {
         results.removeAll();
+        displayedAdvice = null;
+        itemNames.clear();
         if (clearPortfolio) {
             captured = null;
             stocks.removeAll();

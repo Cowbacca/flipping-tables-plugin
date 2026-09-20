@@ -28,17 +28,17 @@ import com.google.inject.Provides;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.InventoryID;
+import net.runelite.api.ScriptID;
 import net.runelite.api.VarClientInt;
 import net.runelite.api.VarClientStr;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 import net.runelite.api.events.GrandExchangeSearched;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.VarClientIntChanged;
-import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -84,6 +84,8 @@ public class FlippingTablesPlugin extends Plugin {
     private ExecutorService worker;
     private volatile CapturedPortfolio lastCapture;
     private volatile boolean running;
+    private boolean portfolioChanged;
+    private volatile PortfolioPlanProgress planProgress;
 
     @Provides
     FlippingTablesConfig provideConfig(ConfigManager configManager) {
@@ -118,7 +120,11 @@ public class FlippingTablesPlugin extends Plugin {
         api.cancelPendingRequest();
         repository.clear();
         lastCapture = null;
-        geSearchButton.reset();
+        clientThread.invokeLater(() -> {
+            geSearchButton.reset();
+            geOfferWidgetController.clearSuggestion();
+        });
+        planProgress = null;
         geLimitsTracker.resetSession();
         if (worker != null) {
             worker.shutdownNow();
@@ -202,6 +208,7 @@ public class FlippingTablesPlugin extends Plugin {
                 names.put(action.getItemId(), itemManager.getItemComposition(Math.toIntExact(action.getItemId())).getName());
             }
             repository.save(response, request.getSnapshot());
+            planProgress = PortfolioPlanProgress.start(captured, response.getAdvice().getActions());
             onPanel(requestGeneration, () -> panel.showAdvice(response, names));
         } catch (RuntimeException error) {
             invalidate("Unable to verify this portfolio. Read it again before using advice.", true);
@@ -211,13 +218,13 @@ public class FlippingTablesPlugin extends Plugin {
     @Subscribe
     public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged event) {
         geLimitsTracker.onGrandExchangeOfferChanged(event);
-        invalidateIfPortfolioChanged();
+        portfolioChanged = true;
     }
 
     @Subscribe
     public void onItemContainerChanged(ItemContainerChanged event) {
         if (event.getContainerId() == InventoryID.INVENTORY.getId()) {
-            invalidateIfPortfolioChanged();
+            portfolioChanged = true;
         }
     }
 
@@ -234,9 +241,19 @@ public class FlippingTablesPlugin extends Plugin {
 
     @Subscribe
     public void onGameTick(GameTick event) {
+        if (portfolioChanged) {
+            portfolioChanged = false;
+            invalidateIfPortfolioChanged();
+        }
         if (repository.isExpired()) {
             invalidate("Advice is five minutes old. Request a fresh plan.", false);
         }
+    }
+
+    @Subscribe
+    public void onClientTick(ClientTick event) {
+        geSearchButton.init();
+        geOfferWidgetController.refresh();
     }
 
     @Subscribe
@@ -253,14 +270,12 @@ public class FlippingTablesPlugin extends Plugin {
 
     @Subscribe
     public void onGrandExchangeSearched(GrandExchangeSearched event) {
-        if ("ft".equals(client.getVarcStrValue(VarClientStr.INPUT_TEXT))) {
+        if ("ft".equalsIgnoreCase(client.getVarcStrValue(VarClientStr.INPUT_TEXT))) {
             short[] ids = repository.buyItemIds();
-            if (ids.length > 0) {
-                client.setGeSearchResultIndex(0);
-                client.setGeSearchResultCount(ids.length);
-                client.setGeSearchResultIds(ids);
-                event.consume();
-            }
+            client.setGeSearchResultIndex(0);
+            client.setGeSearchResultCount(ids.length);
+            client.setGeSearchResultIds(ids);
+            event.consume();
         }
     }
 
@@ -270,37 +285,16 @@ public class FlippingTablesPlugin extends Plugin {
             return;
         }
         geOfferWidgetController.clearSuggestion();
-        if (client.getVarcIntValue(VarClientInt.INPUT_TYPE) != 7) {
-            return;
-        }
-        Widget offer = client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER);
-        Widget title = client.getWidget(WidgetInfo.CHATBOX_TITLE);
-        if (offer == null || title == null) {
-            return;
-        }
-        Widget heading = offer.getChild(18);
-        if (heading == null || title.getText() == null) {
-            return;
-        }
-        if (title.getText().startsWith("How many")) {
-            if ("Buy offer".equals(heading.getText())) {
-                geOfferWidgetController.handleBuyQuantityWidgetOpened();
-            } else if ("Sell offer".equals(heading.getText())) {
-                geOfferWidgetController.handleSellQuantityWidgetOpened();
-            }
-        } else if (title.getText().toLowerCase(java.util.Locale.ROOT).contains("price")) {
-            if ("Buy offer".equals(heading.getText())) {
-                geOfferWidgetController.handleBuyPriceWidgetOpened();
-            } else if ("Sell offer".equals(heading.getText())) {
-                geOfferWidgetController.handleSellPriceWidgetOpened();
-            }
-        }
+        geSearchButton.onInputTypeChanged();
     }
 
     @Subscribe
     public void onScriptPostFired(ScriptPostFired event) {
-        if (event.getScriptId() == 750) {
+        if (event.getScriptId() == ScriptID.GE_ITEM_SEARCH) {
             geSearchButton.init();
+        }
+        if (event.getScriptId() == ScriptID.GE_OFFERS_SETUP_BUILD) {
+            geOfferWidgetController.clearSuggestion();
         }
     }
 
@@ -310,9 +304,21 @@ public class FlippingTablesPlugin extends Plugin {
             return;
         }
         try {
-            if (!captureService.capture().getFingerprint().equals(previous.getFingerprint())) {
-                invalidate("Inventory or offers changed. Read your portfolio again.", true);
+            CapturedPortfolio current = planProgress == null ? captureService.capture() : captureService.captureForProgress();
+            if (current.getFingerprint().equals(previous.getFingerprint())) {
+                return;
             }
+            if (planProgress != null && !repository.isExpired()) {
+                java.util.Optional<PortfolioPlanProgress> advanced = planProgress.advance(current);
+                if (advanced.isPresent()) {
+                    planProgress = advanced.get();
+                    repository.markCompleted(planProgress.getCompletedActions());
+                    lastCapture = current;
+                    onPanel(generation.get(), () -> panel.showPlanProgress());
+                    return;
+                }
+            }
+            invalidate("Portfolio changed outside this plan. Read your portfolio again.", true);
         } catch (RuntimeException error) {
             invalidate(error.getMessage(), true);
         }
@@ -322,6 +328,8 @@ public class FlippingTablesPlugin extends Plugin {
         long changedGeneration = generation.incrementAndGet();
         api.cancelPendingRequest();
         repository.clear();
+        planProgress = null;
+        clientThread.invokeLater(geOfferWidgetController::clearSuggestion);
         if (clearPortfolio) {
             lastCapture = null;
         }

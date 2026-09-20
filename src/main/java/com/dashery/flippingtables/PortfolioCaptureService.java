@@ -52,6 +52,14 @@ public final class PortfolioCaptureService {
     }
 
     public CapturedPortfolio capture() {
+        return capture(false);
+    }
+
+    public CapturedPortfolio captureForProgress() {
+        return capture(true);
+    }
+
+    private CapturedPortfolio capture(boolean includeCompleted) {
         if (client.getGameState() != GameState.LOGGED_IN) {
             throw new IllegalStateException("Log in before capturing a portfolio.");
         }
@@ -66,7 +74,7 @@ public final class PortfolioCaptureService {
 
         Map<Integer, StockQuantity> stock = new LinkedHashMap<>();
         long walletCoins = captureInventory(inventory, stock);
-        List<PortfolioModels.OpenOffer> offers = captureOffers(geOffers, stock);
+        List<PortfolioModels.OpenOffer> offers = captureOffers(geOffers, stock, includeCompleted);
         boolean members = isMembers();
         List<CapturedPortfolio.Stock> capturedStock = stock.values().stream()
                 .filter(StockQuantity::hasQuantity)
@@ -99,7 +107,8 @@ public final class PortfolioCaptureService {
         return walletCoins;
     }
 
-    private List<PortfolioModels.OpenOffer> captureOffers(GrandExchangeOffer[] geOffers, Map<Integer, StockQuantity> stock) {
+    private List<PortfolioModels.OpenOffer> captureOffers(GrandExchangeOffer[] geOffers, Map<Integer, StockQuantity> stock,
+            boolean includeCompleted) {
         List<PortfolioModels.OpenOffer> offers = new ArrayList<>();
         for (int slot = 0; slot < geOffers.length; slot++) {
             GrandExchangeOffer offer = geOffers[slot];
@@ -107,11 +116,12 @@ public final class PortfolioCaptureService {
                 continue;
             }
             GrandExchangeOfferState state = offer.getState();
-            if (state == GrandExchangeOfferState.BOUGHT || state == GrandExchangeOfferState.SOLD
+            boolean completed = state == GrandExchangeOfferState.BOUGHT || state == GrandExchangeOfferState.SOLD;
+            if ((completed && !includeCompleted)
                     || state == GrandExchangeOfferState.CANCELLED_BUY || state == GrandExchangeOfferState.CANCELLED_SELL) {
                 throw new IllegalStateException("Collect finished Grand Exchange offers before capturing a portfolio.");
             }
-            if (state != GrandExchangeOfferState.BUYING && state != GrandExchangeOfferState.SELLING) {
+            if (state != GrandExchangeOfferState.BUYING && state != GrandExchangeOfferState.SELLING && !completed) {
                 continue;
             }
             int canonicalItemId = canonicalize.applyAsInt(offer.getItemId());
@@ -122,10 +132,10 @@ public final class PortfolioCaptureService {
                     || filledQuantity > requestedQuantity) {
                 throw new IllegalStateException("Your Grand Exchange offer has invalid values. Collect it and create it again.");
             }
-            String side = state == GrandExchangeOfferState.BUYING ? "BUY" : "SELL";
+            String side = state == GrandExchangeOfferState.BUYING || state == GrandExchangeOfferState.BOUGHT ? "BUY" : "SELL";
             offers.add(new PortfolioModels.OpenOffer("slot-" + slot, canonicalItemId, side, price, requestedQuantity,
                     filledQuantity));
-            if (state == GrandExchangeOfferState.SELLING) {
+            if ("SELL".equals(side)) {
                 ItemComposition composition = itemComposition.apply(canonicalItemId);
                 String name = composition == null ? "Item " + canonicalItemId : composition.getName();
                 stock.computeIfAbsent(canonicalItemId, ignored -> new StockQuantity(canonicalItemId, name))

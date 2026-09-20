@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path -Parent $PSScriptRoot
-$jarPath = Join-Path $projectDirectory 'build/libs/flippingtables-2.0.1-all.jar'
+$jarPath = Join-Path $projectDirectory 'build/libs/flippingtables-2.0.2-all.jar'
 $runtimeDirectory = Join-Path $env:LOCALAPPDATA 'RuneLite/jre/bin'
 $javaPath = Join-Path $runtimeDirectory 'java.exe'
 

@@ -28,6 +28,43 @@ import static org.mockito.Mockito.verify;
 
 public class FlippingTablesPanelTest {
     @Test
+    public void keepsRemainingSuggestionControlsVisibleAfterAnOfferIsPlaced() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            PortfolioAdviceRepository repository = new PortfolioAdviceRepository();
+            PortfolioModels.Action first = new PortfolioModels.Action("CREATE_BUY", 4151, 2, 100, null);
+            PortfolioModels.Action next = new PortfolioModels.Action("CREATE_BUY", 1515, 10, 50, null);
+            PortfolioModels.AdviceResponse response = new PortfolioModels.AdviceResponse(1,
+                    new PortfolioModels.Advice(java.util.Arrays.asList(first, next), 700, 0, 0, 0,
+                            java.util.Collections.emptyList(), "EXACT"), "2026-09-20T07:00:00Z");
+            repository.save(response, null);
+            FlippingTablesPanel panel = new FlippingTablesPanel(mock(FlippingTablesPlugin.class),
+                    new FlippingTablesConfig() {}, repository);
+            panel.displayPortfolio(PortfolioRequestBuilderTest.portfolio());
+            panel.showAdvice(response, java.util.Collections.emptyMap());
+            repository.markCompleted(java.util.Collections.singletonList(first));
+            panel.showPlanProgress();
+            java.util.List<String> buttons = buttonLabels(panel);
+            assertEquals(1, java.util.Collections.frequency(buttons, "Use this suggestion"));
+            assertEquals(1, java.util.Collections.frequency(buttons, "Copy quantity"));
+            assertEquals(1, java.util.Collections.frequency(buttons, "Copy price"));
+            panel.shutdown();
+        });
+    }
+
+    private static java.util.List<String> buttonLabels(java.awt.Container container) {
+        java.util.List<String> labels = new java.util.ArrayList<>();
+        for (java.awt.Component component : container.getComponents()) {
+            if (component instanceof JButton) {
+                labels.add(((JButton) component).getText());
+            }
+            if (component instanceof java.awt.Container) {
+                labels.addAll(buttonLabels((java.awt.Container) component));
+            }
+        }
+        return labels;
+    }
+
+    @Test
     public void retainsSelectionsAndShowsErrorsBesidePlanAcrossRepeatedRequests() throws Exception {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> {

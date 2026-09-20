@@ -9,66 +9,108 @@ import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.api.widgets.WidgetType;
-import net.runelite.client.callback.ClientThread;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.util.Arrays;
 
 @Singleton
 @RequiredArgsConstructor(onConstructor = @__({@Inject}))
 public class GeSearchButton {
-    private boolean showFlippingTablesResults = false;
-    private Widget previousContainer;
     private final Client client;
-    private final ClientThread clientThread;
+    private boolean preferAdvice;
+    private boolean newSearch = true;
+    private Widget container;
+    private Widget button;
+
+    public void onInputTypeChanged() {
+        newSearch = true;
+        if (!isGeSearch()) {
+            hideButton();
+        }
+    }
 
     public void init() {
-        Widget container = client.getWidget(WidgetInfo.CHATBOX_CONTAINER);
-        if (container == null || container == previousContainer) {
+        if (!isGeSearch()) {
+            hideButton();
             return;
         }
-        previousContainer = container;
-        Widget widget = container.createChild(-1, WidgetType.GRAPHIC);
+        Widget parent = client.getWidget(WidgetInfo.CHATBOX_CONTAINER);
+        Widget input = client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT);
+        if (parent == null || parent.isHidden() || input == null) {
+            hideButton();
+            return;
+        }
+        String query = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
+        if (newSearch && preferAdvice && (query == null || query.isEmpty())) {
+            Object[] listener = input.getOnKeyListener();
+            if (listener == null) {
+                return;
+            }
+            newSearch = false;
+            client.setVarcStrValue(VarClientStr.INPUT_TEXT, "ft");
+            client.runScript(listener);
+            query = client.getVarcStrValue(VarClientStr.INPUT_TEXT);
+        }
+        newSearch = false;
+        preferAdvice = "ft".equalsIgnoreCase(query);
+        if (parent != container || !containsButton(parent)) {
+            hideButton();
+            container = parent;
+            button = createButton(parent);
+        }
+        button.setAction(0, preferAdvice ? "Show normal search" : "Show buy advice");
+        button.setHidden(false);
+    }
+
+    public void reset() {
+        preferAdvice = false;
+        newSearch = true;
+        hideButton();
+    }
+
+    private Widget createButton(Widget parent) {
+        Widget widget = parent.createChild(-1, WidgetType.GRAPHIC);
         widget.setOriginalWidth(20);
         widget.setOriginalHeight(20);
         widget.setOriginalX(440);
         widget.setOriginalY(0);
         widget.setSpriteId(SpriteID.WELCOME_SCREEN_COINS);
-        widget.setAction(1, "Show buy advice");
         widget.setHasListener(true);
-        widget.setOnOpListener((JavaScriptCallback) ev -> toggleFlippingTablesResults());
+        widget.setOnOpListener((JavaScriptCallback) event -> toggleAdvice());
         widget.revalidate();
-
-        if (showFlippingTablesResults) {
-            clientThread.invokeLater(this::updateSearchBox);
-        }
+        return widget;
     }
 
-    private void updateSearchBox() {
-        client.setVarcStrValue(VarClientStr.INPUT_TEXT, showFlippingTablesResults ? "ft" : "");
-        client.setVarcIntValue(VarClientInt.INPUT_TYPE, 14);
-
-        Widget geSearchBox = client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT);
-        if (geSearchBox == null) {
+    private void toggleAdvice() {
+        if (!isGeSearch()) {
             return;
         }
-
-        Object[] scriptArgs = geSearchBox.getOnKeyListener();
-        if (scriptArgs == null) {
+        Widget input = client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT);
+        Object[] listener = input == null ? null : input.getOnKeyListener();
+        if (listener == null) {
             return;
         }
-
-        client.runScript(scriptArgs);
-        geSearchBox.setHidden(showFlippingTablesResults);
+        preferAdvice = !"ft".equalsIgnoreCase(client.getVarcStrValue(VarClientStr.INPUT_TEXT));
+        newSearch = false;
+        client.setVarcStrValue(VarClientStr.INPUT_TEXT, preferAdvice ? "ft" : "");
+        client.runScript(listener);
+        init();
     }
 
-    private void toggleFlippingTablesResults() {
-        showFlippingTablesResults = !showFlippingTablesResults;
-        updateSearchBox();
+    private boolean isGeSearch() {
+        Widget exchange = client.getWidget(WidgetInfo.GRAND_EXCHANGE_WINDOW_CONTAINER);
+        return client.getVarcIntValue(VarClientInt.INPUT_TYPE) == 14 && exchange != null && !exchange.isHidden();
     }
 
-    public void reset() {
-        showFlippingTablesResults = false;
-        previousContainer = null;
+    private boolean containsButton(Widget parent) {
+        Widget[] children = parent.getChildren();
+        return button != null && children != null && Arrays.stream(children).anyMatch(child -> child == button);
+    }
+
+    private void hideButton() {
+        if (button != null) {
+            button.setHidden(true);
+        }
     }
 }

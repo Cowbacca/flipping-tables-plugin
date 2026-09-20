@@ -1,56 +1,59 @@
 package com.dashery.flippingtables;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.FontID;
-import net.runelite.api.VarClientStr;
-import net.runelite.api.widgets.*;
-import net.runelite.client.callback.ClientThread;
+import net.runelite.api.widgets.JavaScriptCallback;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.api.widgets.WidgetPositionMode;
+import net.runelite.api.widgets.WidgetSizeMode;
+import net.runelite.api.widgets.WidgetTextAlignment;
+import net.runelite.api.widgets.WidgetType;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
 @Singleton
-@RequiredArgsConstructor(onConstructor = @__({ @Inject}))
-@Slf4j
+@RequiredArgsConstructor(onConstructor = @__({@Inject}))
 public class WidgetCreator {
     private final Client client;
-    private final ClientThread clientThread;
+    private Widget previousParent;
     private Widget previousSuggestion;
 
     public void clearSuggestion() {
         if (previousSuggestion != null) {
             previousSuggestion.setHidden(true);
-            previousSuggestion = null;
         }
     }
 
-    public void createChildWidget(WidgetInfo parent, String text, JavaScriptCallback onClick) {
-        log.info("Creating child widget with text {}", text);
-        clientThread.invokeLater(() -> {
-            Widget widget = client.getWidget(parent);
+    public void showSuggestion(String text, String action, JavaScriptCallback onClick) {
+        Widget parent = client.getWidget(WidgetInfo.CHATBOX_CONTAINER);
+        if (parent == null || parent.isHidden()) {
             clearSuggestion();
-            if (widget == null) {
-                return;
-            }
-            Widget childWidget = widget.createChild(-1, WidgetType.TEXT);
-            previousSuggestion = childWidget;
-            childWidget.setText(text);
-            childWidget.setTextColor(0x800000);
-            childWidget.setFontId(FontID.QUILL_8);
-            childWidget.setAction(0, "Set price");
-            childWidget.setHasListener(true);
-            childWidget.setOnOpListener(onClick);
-            childWidget.setXPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
-            childWidget.setOriginalX(0);
-            childWidget.setYPositionMode(WidgetPositionMode.ABSOLUTE_TOP);
-            childWidget.setOriginalY(8);
-            childWidget.setOriginalHeight(24);
-            childWidget.setXTextAlignment(WidgetTextAlignment.CENTER);
-            childWidget.setYTextAlignment(WidgetTextAlignment.CENTER);
-            childWidget.setWidthMode(WidgetSizeMode.MINUS);
-            childWidget.revalidate();
-        });
+            return;
+        }
+        if (parent != previousParent || previousSuggestion == null
+                || parent.getChild(previousSuggestion.getIndex()) != previousSuggestion) {
+            clearSuggestion();
+            previousParent = parent;
+            previousSuggestion = parent.createChild(-1, WidgetType.TEXT);
+            previousSuggestion.setTextColor(0x800000);
+            previousSuggestion.setFontId(FontID.BOLD_12);
+            previousSuggestion.setHasListener(true);
+            previousSuggestion.setXPositionMode(WidgetPositionMode.ABSOLUTE_CENTER);
+            previousSuggestion.setOriginalX(0);
+            previousSuggestion.setYPositionMode(WidgetPositionMode.ABSOLUTE_BOTTOM);
+            previousSuggestion.setOriginalY(8);
+            previousSuggestion.setOriginalHeight(20);
+            previousSuggestion.setXTextAlignment(WidgetTextAlignment.CENTER);
+            previousSuggestion.setYTextAlignment(WidgetTextAlignment.CENTER);
+            previousSuggestion.setWidthMode(WidgetSizeMode.MINUS);
+            previousSuggestion.revalidate();
+        }
+        previousSuggestion.setText(text);
+        previousSuggestion.setAction(0, action);
+        previousSuggestion.setOnOpListener(onClick);
+        previousSuggestion.setHidden(false);
     }
 }

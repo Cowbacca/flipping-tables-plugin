@@ -4,6 +4,11 @@ import javax.inject.Singleton;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Singleton
 public class PortfolioAdviceRepository {
@@ -11,12 +16,14 @@ public class PortfolioAdviceRepository {
     private PortfolioModels.Snapshot snapshot;
     private PortfolioModels.Action selected;
     private Instant savedAt;
+    private final Set<PortfolioModels.Action> completed = new HashSet<>();
 
     public synchronized void save(PortfolioModels.AdviceResponse response, PortfolioModels.Snapshot snapshot) {
         this.response = response;
         this.snapshot = snapshot;
         this.savedAt = Instant.now();
         this.selected = null;
+        completed.clear();
     }
 
     public synchronized void clear() {
@@ -24,6 +31,7 @@ public class PortfolioAdviceRepository {
         snapshot = null;
         selected = null;
         savedAt = null;
+        completed.clear();
     }
 
     public synchronized boolean isExpired() {
@@ -31,27 +39,52 @@ public class PortfolioAdviceRepository {
     }
 
     public synchronized void select(PortfolioModels.Action action) {
-        if (response == null || isExpired() || !response.getAdvice().getActions().contains(action)) {
+        if (response == null || isExpired() || completed.contains(action) || !response.getAdvice().getActions().contains(action)) {
             throw new IllegalStateException("Request fresh advice before selecting a suggestion.");
         }
         selected = action;
     }
 
     public synchronized Optional<PortfolioModels.Action> selectedFor(int itemId, String side) {
-        if (selected == null || isExpired() || selected.getItemId() != itemId) {
+        if (response == null || isExpired()) {
             return Optional.empty();
         }
-        if (selected.getType().equals("CREATE_" + side)) {
+        if (selected != null && !completed.contains(selected) && selected.getItemId() == itemId
+                && selected.getType().equals("CREATE_" + side)) {
             return Optional.of(selected);
         }
-        return Optional.empty();
+        List<PortfolioModels.Action> matching = availableActions().stream()
+                .filter(action -> action.getItemId() == itemId && action.getType().equals("CREATE_" + side))
+                .collect(Collectors.toList());
+        return matching.size() == 1 ? Optional.of(matching.get(0)) : Optional.empty();
+    }
+
+    public synchronized void markCompleted(List<PortfolioModels.Action> actions) {
+        if (response != null) {
+            actions.stream().filter(response.getAdvice().getActions()::contains).forEach(completed::add);
+            if (completed.contains(selected)) {
+                selected = null;
+            }
+        }
+    }
+
+    public synchronized boolean isCompleted(PortfolioModels.Action action) {
+        return completed.contains(action);
+    }
+
+    public synchronized List<PortfolioModels.Action> availableActions() {
+        if (response == null || isExpired()) {
+            return Collections.emptyList();
+        }
+        return response.getAdvice().getActions().stream().filter(action -> !completed.contains(action))
+                .collect(Collectors.toList());
     }
 
     public synchronized short[] buyItemIds() {
         if (response == null || isExpired()) {
             return new short[0];
         }
-        int[] ids = response.getAdvice().getActions().stream()
+        int[] ids = availableActions().stream()
                 .filter(action -> "CREATE_BUY".equals(action.getType()))
                 .mapToInt(action -> Math.toIntExact(action.getItemId()))
                 .filter(id -> id > 0 && id <= 65535)

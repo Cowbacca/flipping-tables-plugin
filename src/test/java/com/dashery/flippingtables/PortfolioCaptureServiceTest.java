@@ -20,8 +20,25 @@ import java.util.Collections;
 import java.util.EnumSet;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 public class PortfolioCaptureServiceTest {
+    @Test
+    public void observesInstantFinishedOffersForPlanProgressButRequiresCollectionForNewAdvice() {
+        Client client = client(new Item[]{new Item(995, 800)}, new GrandExchangeOffer[]{offer(4151, 2, 2,
+                GrandExchangeOfferState.BOUGHT)});
+        PortfolioCaptureService service = new PortfolioCaptureService(client, itemId -> itemId,
+                itemId -> composition("Abyssal whip", true), new GeLimitsTracker(Clock.systemUTC(), itemId -> 70),
+                Clock.systemUTC());
+
+        assertThrows(IllegalStateException.class, service::capture);
+        CapturedPortfolio progress = service.captureForProgress();
+        assertEquals(800, progress.getWalletCoins());
+        assertEquals("BUY", progress.getOpenOffers().get(0).getSide());
+        assertEquals(2, progress.getOpenOffers().get(0).getFilledQuantity());
+        assertEquals(0, progress.getStock().size());
+    }
+
     @Test
     public void capturesRemainingPartialSellStockAlongsideInventoryStock() {
         ItemComposition composition = composition("Abyssal whip", true);
