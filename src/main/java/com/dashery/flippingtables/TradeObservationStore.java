@@ -26,7 +26,7 @@ final class TradeObservationStore implements AutoCloseable {
         this.file = file;
     }
 
-    AccountLedger load(String profileKey) throws IOException {
+    synchronized AccountLedger load(String profileKey) throws IOException {
         ensureLoaded();
         AccountLedger ledger = root.ledgers.get(profileKey);
         if (ledger == null) {
@@ -38,7 +38,7 @@ final class TradeObservationStore implements AutoCloseable {
         return gson.fromJson(gson.toJson(ledger), AccountLedger.class);
     }
 
-    void append(String profileKey, TrackedOffer offer, TradeObservation observation, String destination) throws IOException {
+    synchronized void append(String profileKey, TrackedOffer offer, TradeObservation observation, String destination) throws IOException {
         ensureLoaded();
         AccountLedger ledger = root.ledgers.get(profileKey);
         if (ledger == null) {
@@ -52,7 +52,7 @@ final class TradeObservationStore implements AutoCloseable {
         save();
     }
 
-    List<QueuedObservation> batch(String profileKey, String destination) throws IOException {
+    synchronized List<QueuedObservation> batch(String profileKey, String destination) throws IOException {
         ensureLoaded();
         AccountLedger ledger = root.ledgers.get(profileKey);
         List<QueuedObservation> result = new ArrayList<>();
@@ -69,7 +69,7 @@ final class TradeObservationStore implements AutoCloseable {
         return result;
     }
 
-    void acknowledge(String profileKey, List<QueuedObservation> accepted) throws IOException {
+    synchronized void acknowledge(String profileKey, List<QueuedObservation> accepted) throws IOException {
         ensureLoaded();
         AccountLedger ledger = root.ledgers.get(profileKey);
         if (ledger == null) {
@@ -133,7 +133,7 @@ final class TradeObservationStore implements AutoCloseable {
     }
 
     @Override
-    public void close() throws IOException {
+    public synchronized void close() throws IOException {
         if (lock != null) {
             lock.release();
             lock = null;
