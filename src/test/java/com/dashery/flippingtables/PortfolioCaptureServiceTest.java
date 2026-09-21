@@ -40,6 +40,18 @@ public class PortfolioCaptureServiceTest {
     }
 
     @Test
+    public void observesCancelledOffersAsAPortfolioChangeWithoutBlockingPlanProgressCapture() {
+        Client client = client(new Item[]{new Item(995, 800)}, new GrandExchangeOffer[]{offer(4151, 2, 0,
+                GrandExchangeOfferState.CANCELLED_BUY)});
+        PortfolioCaptureService service = new PortfolioCaptureService(client, itemId -> itemId,
+                itemId -> composition("Abyssal whip", true), new GeLimitsTracker(Clock.systemUTC(), itemId -> 70),
+                Clock.systemUTC());
+
+        assertThrows(IllegalStateException.class, service::capture);
+        assertEquals(0, service.captureForProgress().getOpenOffers().size());
+    }
+
+    @Test
     public void capturesRemainingPartialSellStockAlongsideInventoryStock() {
         ItemComposition composition = composition("Abyssal whip", true);
         Client client = client(new Item[]{new Item(4151, 2)}, new GrandExchangeOffer[]{offer(4151, 10, 4,

@@ -48,6 +48,34 @@ public class PortfolioAdviceRepositoryTest {
         assertArrayEquals(new short[]{4151}, repository.buyItemIds());
     }
 
+    @Test
+    public void retainsAdviceAndSuggestionsWhenThePortfolioChanges() {
+        PortfolioAdviceRepository repository = new PortfolioAdviceRepository();
+        PortfolioModels.Action buy = new PortfolioModels.Action("CREATE_BUY", 4151, 1, 100, null);
+        repository.save(response(buy), null);
+
+        repository.markStale();
+
+        assertTrue(repository.hasAdvice());
+        assertTrue(repository.isActionable());
+        assertEquals(Collections.singletonList(buy), repository.availableActions());
+        assertTrue(repository.selectedFor(4151, "BUY").isPresent());
+        repository.select(buy);
+    }
+
+    @Test
+    public void offersARepriceSellSuggestionForItsSavedOfferSide() {
+        PortfolioAdviceRepository repository = new PortfolioAdviceRepository();
+        PortfolioModels.OpenOffer sell = new PortfolioModels.OpenOffer("slot-1", 1515, "SELL", 100, 2, 0);
+        PortfolioModels.Action reprice = new PortfolioModels.Action("REPRICE", 1515, 2, 120, "slot-1");
+        repository.save(response(reprice), new PortfolioModels.Snapshot(0, Collections.emptyList(),
+                Collections.singletonList(sell), 8, Collections.emptyMap(), "2026-09-20T10:00:00Z"));
+
+        assertSame(reprice, repository.selectedFor(1515, "SELL").get());
+        repository.select(reprice);
+        assertSame(reprice, repository.selectedFor(1515, "SELL").get());
+    }
+
     private static PortfolioModels.AdviceResponse response(PortfolioModels.Action... actions) {
         return new PortfolioModels.AdviceResponse(1, new PortfolioModels.Advice(Arrays.asList(actions), 0, 0, 0, 0,
                 Collections.emptyList(), "EXACT"), "2026-09-19T20:00:00Z");

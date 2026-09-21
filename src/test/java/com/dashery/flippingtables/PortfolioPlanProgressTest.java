@@ -82,6 +82,86 @@ public class PortfolioPlanProgressTest {
                 Collections.singletonList(offer("slot-3", 4151, "BUY", 100, 2, 0)))).isPresent());
     }
 
+    @Test
+    public void recordsPlannedCancellationThenKeepsTheNextBuyUsableAfterCollection() {
+        PortfolioModels.OpenOffer existingBuy = offer("slot-3", 4151, "BUY", 100, 2, 0);
+        PortfolioModels.Action cancel = new PortfolioModels.Action("CANCEL", 4151, 2, 100, "slot-3");
+        PortfolioModels.Action nextBuy = create("CREATE_BUY", 1515, 1, 100);
+        PortfolioPlanProgress progress = PortfolioPlanProgress.start(portfolio(800, Collections.singletonList(existingBuy)),
+                Arrays.asList(cancel, nextBuy));
+
+        Optional<PortfolioPlanProgress> cancelled = progress.advance(portfolio(800, Collections.emptyList()));
+        assertTrue(cancelled.isPresent());
+        assertEquals(Collections.singletonList(cancel), cancelled.get().getCompletedActions());
+        assertEquals(Collections.singletonList(nextBuy), cancelled.get().getPendingActions());
+
+        PortfolioPlanProgress collected = cancelled.get().rebase(portfolio(1_000, Collections.emptyList()));
+        Optional<PortfolioPlanProgress> placed = collected.advance(portfolio(900,
+                Collections.singletonList(offer("slot-1", 1515, "BUY", 100, 1, 0))));
+        assertTrue(placed.isPresent());
+        assertEquals(Arrays.asList(cancel, nextBuy), placed.get().getCompletedActions());
+    }
+
+    @Test
+    public void recordsCancellationAndExactReplacementWhenTheSlotIsReused() {
+        PortfolioModels.OpenOffer existingBuy = offer("slot-3", 4151, "BUY", 100, 2, 0);
+        PortfolioModels.Action cancel = new PortfolioModels.Action("CANCEL", 4151, 2, 100, "slot-3");
+        PortfolioModels.Action nextBuy = create("CREATE_BUY", 1515, 1, 100);
+        PortfolioPlanProgress progress = PortfolioPlanProgress.start(portfolio(800, Collections.singletonList(existingBuy)),
+                Arrays.asList(cancel, nextBuy));
+
+        Optional<PortfolioPlanProgress> advanced = progress.advance(portfolio(700,
+                Collections.singletonList(offer("slot-3", 1515, "BUY", 100, 1, 0))));
+
+        assertTrue(advanced.isPresent());
+        assertEquals(Arrays.asList(cancel, nextBuy), advanced.get().getCompletedActions());
+        assertTrue(advanced.get().getPendingActions().isEmpty());
+    }
+
+    @Test
+    public void recordsAnExactRepriceWhenTheSellSlotIsReused() {
+        PortfolioModels.OpenOffer existingSell = offer("slot-3", 4151, "SELL", 100, 2, 0);
+        PortfolioModels.Action reprice = new PortfolioModels.Action("REPRICE", 4151, 2, 120, "slot-3");
+        PortfolioPlanProgress progress = PortfolioPlanProgress.start(portfolio(1_000, Collections.singletonList(existingSell),
+                stock(4151, 0, 2)), Collections.singletonList(reprice));
+
+        Optional<PortfolioPlanProgress> advanced = progress.advance(portfolio(1_000,
+                Collections.singletonList(offer("slot-3", 4151, "SELL", 120, 2, 0)), stock(4151, 0, 2)));
+
+        assertTrue(advanced.isPresent());
+        assertEquals(Collections.singletonList(reprice), advanced.get().getCompletedActions());
+    }
+
+    @Test
+    public void recordsARepriceAfterItsSellOfferIsCancelledCollectedAndRecreated() {
+        PortfolioModels.OpenOffer existingSell = offer("slot-3", 4151, "SELL", 100, 2, 0);
+        PortfolioModels.Action reprice = new PortfolioModels.Action("REPRICE", 4151, 2, 120, "slot-3");
+        PortfolioPlanProgress progress = PortfolioPlanProgress.start(portfolio(1_000, Collections.singletonList(existingSell),
+                stock(4151, 0, 2)), Collections.singletonList(reprice));
+
+        Optional<PortfolioPlanProgress> cancelled = progress.advance(portfolio(1_000, Collections.emptyList()));
+        assertTrue(cancelled.isPresent());
+        PortfolioPlanProgress collected = cancelled.get().rebase(portfolio(1_000, Collections.emptyList(), stock(4151, 2, 0)));
+        Optional<PortfolioPlanProgress> recreated = collected.advance(portfolio(1_000,
+                Collections.singletonList(offer("slot-1", 4151, "SELL", 120, 2, 0)), stock(4151, 0, 2)));
+
+        assertTrue(recreated.isPresent());
+        assertEquals(Collections.singletonList(reprice), recreated.get().getCompletedActions());
+    }
+
+    @Test
+    public void doesNotTreatAnExtraOfferAsARepriceWhileTheOriginalIsStillOpen() {
+        PortfolioModels.OpenOffer existingSell = offer("slot-3", 4151, "SELL", 100, 2, 0);
+        PortfolioModels.Action reprice = new PortfolioModels.Action("REPRICE", 4151, 2, 120, "slot-3");
+        PortfolioPlanProgress progress = PortfolioPlanProgress.start(portfolio(1_000, Collections.singletonList(existingSell),
+                stock(4151, 0, 2)), Collections.singletonList(reprice));
+
+        Optional<PortfolioPlanProgress> advanced = progress.advance(portfolio(1_000, Arrays.asList(existingSell,
+                offer("slot-1", 4151, "SELL", 120, 2, 0)), stock(4151, 0, 4)));
+
+        assertFalse(advanced.isPresent());
+    }
+
     private static PortfolioModels.Action create(String type, long itemId, long quantity, long price) {
         return new PortfolioModels.Action(type, itemId, quantity, price, null);
     }

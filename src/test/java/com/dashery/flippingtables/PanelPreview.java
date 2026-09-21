@@ -24,7 +24,13 @@ public final class PanelPreview {
                 FlippingTablesPanel panel = new FlippingTablesPanel(mock(FlippingTablesPlugin.class),
                         new FlippingTablesConfig() {}, repository);
                 render(panel, output.resolve("connection.png"));
-                CapturedPortfolio captured = PortfolioRequestBuilderTest.portfolio();
+                CapturedPortfolio captured = new CapturedPortfolio(1000,
+                        Collections.singletonList(new PortfolioModels.OpenOffer("slot-0", 4151, "SELL", 120, 4, 2)),
+                        Arrays.asList(
+                                new CapturedPortfolio.Stock(4151, "Abyssal whip", 3, 2),
+                                new CapturedPortfolio.Stock(1515, "Yew logs", 10, 0),
+                                new CapturedPortfolio.Stock(1127, "Rune platebody", 0, 1)),
+                        Collections.emptyMap(), 8, true, "2026-09-19T20:00:00Z", "preview");
                 panel.displayPortfolio(captured);
                 render(panel, output.resolve("portfolio.png"));
                 PortfolioModels.AdviceResponse response = new PortfolioModels.AdviceResponse(1,
@@ -35,8 +41,16 @@ public final class PanelPreview {
                         "2026-09-19T20:00:00Z");
                 repository.save(response, PortfolioRequestBuilder.create(captured, Collections.emptySet(),
                         Collections.emptyMap(), 1000, java.time.Duration.ofHours(4), 10).getSnapshot());
-                panel.showAdvice(response, Collections.singletonMap(1515L, "Yew logs"));
+                panel.showAdvice(response, java.util.Map.of(1515L, "Yew logs", 4151L, "Abyssal whip"));
                 render(panel, output.resolve("advice.png"));
+                panel.displayPortfolio(captured);
+                panel.showAdviceStatus("Portfolio updated. Review the retained advice and request a fresh plan when ready.");
+                render(panel, output.resolve("needs-review.png"));
+                java.lang.reflect.Field savedAt = PortfolioAdviceRepository.class.getDeclaredField("savedAt");
+                savedAt.setAccessible(true);
+                savedAt.set(repository, java.time.Instant.now().minus(java.time.Duration.ofMinutes(6)));
+                panel.showPlanStale("Advice expired. It remains visible for reference; request a fresh plan before using suggestions.");
+                render(panel, output.resolve("expired-reference.png"));
                 panel.showError("Portfolio advice request failed (HTTP 400). Review your inputs and try again.");
                 render(panel, output.resolve("error.png"));
                 panel.shutdown();

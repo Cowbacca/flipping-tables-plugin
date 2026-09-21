@@ -90,6 +90,7 @@ public class FlippingTablesPlugin extends Plugin {
     private volatile boolean running;
     private boolean portfolioChanged;
     private volatile PortfolioPlanProgress planProgress;
+    private volatile boolean expiryNotified;
 
     @Provides
     FlippingTablesConfig provideConfig(ConfigManager configManager) {
@@ -148,15 +149,38 @@ public class FlippingTablesPlugin extends Plugin {
     }
 
     public void readPortfolio() {
-        invalidate(null, true);
-        long requestGeneration = generation.get();
+        long requestGeneration = invalidateRequest();
         panel.setBusy(true);
         clientThread.invokeLater(() -> {
             try {
                 CapturedPortfolio captured = captureService.capture();
                 if (isCurrent(requestGeneration)) {
+                    boolean progressed = false;
+                    if (lastCapture != null && !captured.getFingerprint().equals(lastCapture.getFingerprint())) {
+                        if (planProgress != null && repository.isActionable()) {
+                            java.util.Optional<PortfolioPlanProgress> advanced = planProgress.advance(captured);
+                            if (advanced.isPresent()) {
+                                planProgress = advanced.get();
+                                repository.markCompleted(planProgress.getCompletedActions());
+                                progressed = true;
+                            } else {
+                                planProgress = planProgress.rebase(captured);
+                                repository.markStale();
+                            }
+                        } else if (repository.hasAdvice()) {
+                            repository.markStale();
+                        }
+                    }
                     lastCapture = captured;
-                    onPanel(requestGeneration, () -> panel.displayPortfolio(captured));
+                    boolean planProgressed = progressed;
+                    onPanel(requestGeneration, () -> {
+                        panel.displayPortfolio(captured);
+                        if (planProgressed) {
+                            panel.showPlanProgress();
+                        } else if (repository.hasAdvice() && repository.isStale()) {
+                            panel.showAdviceStatus("Portfolio updated. Review the retained advice and request a fresh plan when ready.");
+                        }
+                    });
                 }
             } catch (RuntimeException error) {
                 onPanel(requestGeneration, () -> panel.showError(error.getMessage()));
@@ -166,8 +190,7 @@ public class FlippingTablesPlugin extends Plugin {
 
     public void requestAdvice(CapturedPortfolio displayed, Set<Long> selected, Map<Long, Long> costs,
             long cashBudget, Duration nextVisitInterval, Duration followingVisitInterval, String token) {
-        invalidate(null, false);
-        long requestGeneration = generation.get();
+        long requestGeneration = invalidateRequest();
         panel.setBusy(true);
         clientThread.invokeLater(() -> {
             try {
@@ -200,7 +223,7 @@ public class FlippingTablesPlugin extends Plugin {
     }
 
     public void inputsChanged() {
-        invalidate("Inputs changed. Request advice again when ready.", false);
+        markAdviceStale("Inputs changed. Review the retained advice and request a fresh plan when ready.");
     }
 
     public void configureOfferRecording(boolean enabled, String token) {
@@ -217,7 +240,7 @@ public class FlippingTablesPlugin extends Plugin {
         }
         try {
             if (!captureService.capture().getFingerprint().equals(captured.getFingerprint())) {
-                invalidate("Your portfolio changed while advice was loading. Read it again.", true);
+                markAdviceStale("Your portfolio changed while advice was loading. Review the retained advice and read it again before requesting a fresh plan.");
                 return;
             }
             Map<Long, String> names = new HashMap<>();
@@ -225,10 +248,11 @@ public class FlippingTablesPlugin extends Plugin {
                 names.put(action.getItemId(), itemManager.getItemComposition(Math.toIntExact(action.getItemId())).getName());
             }
             repository.save(response, request.getSnapshot());
+            expiryNotified = false;
             planProgress = PortfolioPlanProgress.start(captured, response.getAdvice().getActions());
             onPanel(requestGeneration, () -> panel.showAdvice(response, names));
         } catch (RuntimeException error) {
-            invalidate("Unable to verify this portfolio. Read it again before using advice.", true);
+            markAdviceStale("Unable to verify this portfolio. Review the retained advice and read it again before requesting a fresh plan.");
         }
     }
 
@@ -278,8 +302,8 @@ public class FlippingTablesPlugin extends Plugin {
             portfolioChanged = false;
             invalidateIfPortfolioChanged();
         }
-        if (repository.isExpired()) {
-            invalidate("Advice is five minutes old. Request a fresh plan.", false);
+        if (repository.isExpired() && !expiryNotified) {
+            expireAdvice("Advice is five minutes old. It is retained for reference; request a fresh plan before using suggestions.");
         }
     }
 
@@ -300,7 +324,11 @@ public class FlippingTablesPlugin extends Plugin {
                 });
                 return;
             }
-            invalidate("Configuration changed. Request a fresh plan.", false);
+            if ("apiBaseUrl".equals(event.getKey())) {
+                invalidate("Configuration changed. Request a fresh plan.", true);
+            } else {
+                markAdviceStale("Configuration changed. Review the retained advice and request a fresh plan when ready.");
+            }
             SwingUtilities.invokeLater(() -> {
                 if (panel != null) {
                     panel.configurationChanged("apiBaseUrl".equals(event.getKey()));
@@ -358,13 +386,54 @@ public class FlippingTablesPlugin extends Plugin {
                     planProgress = advanced.get();
                     repository.markCompleted(planProgress.getCompletedActions());
                     lastCapture = current;
-                    onPanel(generation.get(), () -> panel.showPlanProgress());
+                    long changedGeneration = invalidateRequest();
+                    onPanel(changedGeneration, () -> panel.showPlanProgress());
                     return;
                 }
             }
-            invalidate("Portfolio changed outside this plan. Read your portfolio again.", true);
+            planProgress = planProgress == null ? null : planProgress.rebase(current);
+            lastCapture = current;
+            markAdviceStale("Portfolio changed. Review the retained advice and request a fresh plan when ready.");
         } catch (RuntimeException error) {
-            invalidate(error.getMessage(), true);
+            markAdviceStale(error.getMessage());
+        }
+    }
+
+    private long invalidateRequest() {
+        long changedGeneration = generation.incrementAndGet();
+        api.cancelPendingRequest();
+        clientThread.invokeLater(geOfferWidgetController::clearSuggestion);
+        return changedGeneration;
+    }
+
+    private void markAdviceStale(String message) {
+        long changedGeneration = invalidateRequest();
+        repository.markStale();
+        Runnable update = () -> {
+            if (running && generation.get() == changedGeneration && panel != null) {
+                panel.showAdviceStatus(message);
+            }
+        };
+        if (SwingUtilities.isEventDispatchThread()) {
+            update.run();
+        } else {
+            SwingUtilities.invokeLater(update);
+        }
+    }
+
+    private void expireAdvice(String message) {
+        long changedGeneration = generation.get();
+        expiryNotified = true;
+        repository.markStale();
+        Runnable update = () -> {
+            if (running && generation.get() == changedGeneration && repository.isExpired() && panel != null) {
+                panel.showPlanStale(message);
+            }
+        };
+        if (SwingUtilities.isEventDispatchThread()) {
+            update.run();
+        } else {
+            SwingUtilities.invokeLater(update);
         }
     }
 
@@ -372,6 +441,7 @@ public class FlippingTablesPlugin extends Plugin {
         long changedGeneration = generation.incrementAndGet();
         api.cancelPendingRequest();
         repository.clear();
+        expiryNotified = false;
         planProgress = null;
         clientThread.invokeLater(geOfferWidgetController::clearSuggestion);
         if (clearPortfolio) {

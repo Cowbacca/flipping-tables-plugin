@@ -12,12 +12,14 @@ public final class PortfolioPlanProgress {
     private final CapturedPortfolio portfolio;
     private final List<PortfolioModels.Action> pendingActions;
     private final List<PortfolioModels.Action> completedActions;
+    private final Map<String, PortfolioModels.OpenOffer> replacedOffers;
 
     private PortfolioPlanProgress(CapturedPortfolio portfolio, List<PortfolioModels.Action> pendingActions,
-            List<PortfolioModels.Action> completedActions) {
+            List<PortfolioModels.Action> completedActions, Map<String, PortfolioModels.OpenOffer> replacedOffers) {
         this.portfolio = portfolio;
         this.pendingActions = Collections.unmodifiableList(new ArrayList<>(pendingActions));
         this.completedActions = Collections.unmodifiableList(new ArrayList<>(completedActions));
+        this.replacedOffers = Collections.unmodifiableMap(new LinkedHashMap<>(replacedOffers));
     }
 
     public static PortfolioPlanProgress start(CapturedPortfolio portfolio, List<PortfolioModels.Action> actions) {
@@ -26,12 +28,12 @@ public final class PortfolioPlanProgress {
         }
         List<PortfolioModels.Action> pending = new ArrayList<>();
         for (PortfolioModels.Action action : actions) {
-            if (isCreate(action)) {
+            if (isCreate(action) || isCancel(action) || isReprice(action)) {
                 validateAction(action);
                 pending.add(action);
             }
         }
-        return new PortfolioPlanProgress(portfolio, pending, Collections.emptyList());
+        return new PortfolioPlanProgress(portfolio, pending, Collections.emptyList(), offersById(portfolio.getOpenOffers()));
     }
 
     public Optional<PortfolioPlanProgress> advance(CapturedPortfolio current) {
@@ -42,30 +44,70 @@ public final class PortfolioPlanProgress {
         try {
             Map<String, PortfolioModels.OpenOffer> previousOffers = offersById(portfolio.getOpenOffers());
             Map<String, PortfolioModels.OpenOffer> currentOffers = offersById(current.getOpenOffers());
-            if (!existingOffersProgressMonotonically(previousOffers, currentOffers)) {
+            if (!existingOffersProgressMonotonically(previousOffers, currentOffers, pendingActions)) {
                 return Optional.empty();
             }
 
             List<RecognizedCreate> recognized = new ArrayList<>();
             List<PortfolioModels.Action> remaining = new ArrayList<>(pendingActions);
-            for (PortfolioModels.OpenOffer offer : currentOffers.values()) {
-                if (previousOffers.containsKey(offer.getId())) {
+            List<PortfolioModels.Action> completed = new ArrayList<>(completedActions);
+            boolean cancellationObserved = false;
+            boolean repriceObserved = false;
+            boolean repriceCancellationObserved = false;
+            java.util.Set<String> repricedOfferIds = new java.util.HashSet<>();
+            for (PortfolioModels.OpenOffer offer : previousOffers.values()) {
+                PortfolioModels.OpenOffer now = currentOffers.get(offer.getId());
+                if (now != null && sameIdentity(offer, now)) {
                     continue;
                 }
-                PortfolioModels.Action action = takeExactCreate(remaining, offer);
+                if (now == null && hasReprice(remaining, offer, null)) {
+                    repriceCancellationObserved = true;
+                    continue;
+                }
+                PortfolioModels.Action reprice = now == null ? null : takeExactReprice(remaining, offer, now);
+                if (reprice != null) {
+                    repriceObserved = true;
+                    repricedOfferIds.add(offer.getId());
+                    completed.add(reprice);
+                    continue;
+                }
+                PortfolioModels.Action action = takeCancel(remaining, offer);
+                if (action == null) {
+                    return Optional.empty();
+                }
+                cancellationObserved = true;
+                completed.add(action);
+            }
+            for (PortfolioModels.OpenOffer offer : currentOffers.values()) {
+                PortfolioModels.OpenOffer previous = previousOffers.get(offer.getId());
+                if (previous != null && (sameIdentity(previous, offer) || repricedOfferIds.contains(offer.getId()))) {
+                    continue;
+                }
+                PortfolioModels.Action action = takeExactReprice(remaining, replacedOffers, currentOffers, offer);
+                if (action != null) {
+                    repriceObserved = true;
+                    completed.add(action);
+                    continue;
+                }
+                action = takeExactCreate(remaining, offer);
                 if (action == null) {
                     return Optional.empty();
                 }
                 recognized.add(new RecognizedCreate(action, offer));
             }
+            if (cancellationObserved || repriceObserved || repriceCancellationObserved) {
+                for (RecognizedCreate create : recognized) {
+                    completed.add(create.action);
+                }
+                return Optional.of(new PortfolioPlanProgress(current, remaining, completed, replacedOffers));
+            }
             if (!walletMatches(current, recognized) || !stockMatches(current, previousOffers, currentOffers, recognized)) {
                 return Optional.empty();
             }
-            List<PortfolioModels.Action> completed = new ArrayList<>(completedActions);
             for (RecognizedCreate create : recognized) {
                 completed.add(create.action);
             }
-            return Optional.of(new PortfolioPlanProgress(current, remaining, completed));
+            return Optional.of(new PortfolioPlanProgress(current, remaining, completed, replacedOffers));
         } catch (ArithmeticException | IllegalArgumentException exception) {
             return Optional.empty();
         }
@@ -81,6 +123,14 @@ public final class PortfolioPlanProgress {
 
     public List<PortfolioModels.Action> getCompletedActions() {
         return completedActions;
+    }
+
+    public PortfolioPlanProgress rebase(CapturedPortfolio current) {
+        if (current == null || current.getTotalSlots() != portfolio.getTotalSlots()
+                || current.isMembers() != portfolio.isMembers()) {
+            throw new IllegalArgumentException("Portfolio cannot be rebased across worlds.");
+        }
+        return new PortfolioPlanProgress(current, pendingActions, completedActions, replacedOffers);
     }
 
     private boolean walletMatches(CapturedPortfolio current, List<RecognizedCreate> recognized) {
@@ -126,15 +176,76 @@ public final class PortfolioPlanProgress {
     }
 
     private boolean existingOffersProgressMonotonically(Map<String, PortfolioModels.OpenOffer> previous,
-            Map<String, PortfolioModels.OpenOffer> current) {
+            Map<String, PortfolioModels.OpenOffer> current, List<PortfolioModels.Action> actions) {
         for (PortfolioModels.OpenOffer offer : previous.values()) {
             PortfolioModels.OpenOffer now = current.get(offer.getId());
+            if ((now == null || !sameIdentity(offer, now)) && (hasCancel(actions, offer) || hasReprice(actions, offer, now))) {
+                continue;
+            }
             if (now == null || !sameIdentity(offer, now) || now.getFilledQuantity() < offer.getFilledQuantity()
                     || now.getFilledQuantity() > now.getRequestedQuantity()) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static boolean hasCancel(List<PortfolioModels.Action> actions, PortfolioModels.OpenOffer offer) {
+        return actions.stream().anyMatch(action -> isCancel(action) && offer.getId().equals(action.getReplacesOfferId()));
+    }
+
+    private static boolean hasReprice(List<PortfolioModels.Action> actions, PortfolioModels.OpenOffer offer,
+            PortfolioModels.OpenOffer current) {
+        return actions.stream().anyMatch(action -> isReprice(action) && offer.getId().equals(action.getReplacesOfferId())
+                && (current == null || matchesReprice(action, offer, current)));
+    }
+
+    private static PortfolioModels.Action takeCancel(List<PortfolioModels.Action> actions, PortfolioModels.OpenOffer offer) {
+        for (int index = 0; index < actions.size(); index++) {
+            PortfolioModels.Action action = actions.get(index);
+            if (isCancel(action) && offer.getId().equals(action.getReplacesOfferId())) {
+                actions.remove(index);
+                return action;
+            }
+        }
+        return null;
+    }
+
+    private static PortfolioModels.Action takeExactReprice(List<PortfolioModels.Action> actions,
+            PortfolioModels.OpenOffer previous, PortfolioModels.OpenOffer current) {
+        for (int index = 0; index < actions.size(); index++) {
+            PortfolioModels.Action action = actions.get(index);
+            if (matchesReprice(action, previous, current)) {
+                actions.remove(index);
+                return action;
+            }
+        }
+        return null;
+    }
+
+    private static PortfolioModels.Action takeExactReprice(List<PortfolioModels.Action> actions,
+            Map<String, PortfolioModels.OpenOffer> replacedOffers, Map<String, PortfolioModels.OpenOffer> currentOffers,
+            PortfolioModels.OpenOffer current) {
+        for (int index = 0; index < actions.size(); index++) {
+            PortfolioModels.Action action = actions.get(index);
+            PortfolioModels.OpenOffer previous = replacedOffers.get(action.getReplacesOfferId());
+            PortfolioModels.OpenOffer original = previous == null ? null : currentOffers.get(previous.getId());
+            if (previous != null && (original == null || !sameIdentity(previous, original))
+                    && matchesReprice(action, previous, current)) {
+                actions.remove(index);
+                return action;
+            }
+        }
+        return null;
+    }
+
+    private static boolean matchesReprice(PortfolioModels.Action action, PortfolioModels.OpenOffer previous,
+            PortfolioModels.OpenOffer current) {
+        return isReprice(action) && previous.getId().equals(action.getReplacesOfferId())
+                && current.getItemId() == action.getItemId() && current.getSide().equals(previous.getSide())
+                && current.getPricePerItem() == action.getPricePerItem()
+                && current.getRequestedQuantity() == action.getQuantity()
+                && current.getFilledQuantity() >= 0L && current.getFilledQuantity() <= current.getRequestedQuantity();
     }
 
     private PortfolioModels.Action takeExactCreate(List<PortfolioModels.Action> remaining,
@@ -205,8 +316,18 @@ public final class PortfolioPlanProgress {
         return action != null && ("CREATE_BUY".equals(action.getType()) || "CREATE_SELL".equals(action.getType()));
     }
 
+    private static boolean isCancel(PortfolioModels.Action action) {
+        return action != null && "CANCEL".equals(action.getType());
+    }
+
+    private static boolean isReprice(PortfolioModels.Action action) {
+        return action != null && "REPRICE".equals(action.getType());
+    }
+
     private static void validateAction(PortfolioModels.Action action) {
-        if (action.getItemId() <= 0L || action.getQuantity() <= 0L || action.getPricePerItem() <= 0L) {
+        if (action.getItemId() <= 0L || action.getQuantity() <= 0L || action.getPricePerItem() < 0L
+                || ((isCancel(action) || isReprice(action))
+                && (action.getReplacesOfferId() == null || action.getReplacesOfferId().isEmpty()))) {
             throw new IllegalArgumentException("Invalid planned create action.");
         }
     }

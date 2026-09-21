@@ -38,7 +38,7 @@ import static org.mockito.Mockito.when;
 
 public class GePlanFlowTest {
     @Test
-    public void preservesRemainingBuyAfterWalletEventThenExactOfferEventAndClearsUnexpectedChange() throws Exception {
+    public void preservesRemainingBuyAfterWalletEventThenExactOfferEventAndRetainsUnexpectedChangeForReference() throws Exception {
         AtomicReference<Item[]> inventory = new AtomicReference<>(coins(1_000));
         AtomicReference<GrandExchangeOffer[]> offers = new AtomicReference<>(new GrandExchangeOffer[8]);
         Client client = client(inventory, offers);
@@ -90,8 +90,10 @@ public class GePlanFlowTest {
         plugin.onGameTick(new GameTick());
         flushEdt();
 
-        assertArrayEquals(new short[0], repository.buyItemIds());
-        verify(panel).invalidateAdvice(any(String.class), org.mockito.ArgumentMatchers.eq(true));
+        assertTrue(repository.hasAdvice());
+        assertTrue(repository.isActionable());
+        assertArrayEquals(new short[]{(short) 1515}, repository.buyItemIds());
+        verify(panel).showAdviceStatus(any(String.class));
         verify(panel, never()).showError(any(String.class));
     }
 

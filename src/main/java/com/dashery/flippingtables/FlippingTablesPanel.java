@@ -63,10 +63,13 @@ public class FlippingTablesPanel extends PluginPanel {
     private final JPanel stocks = column();
     private final JPanel results = column();
     private final List<StockInput> stockInputs = new ArrayList<>();
+    private final Map<Long, StockSelection> stockSelections = new HashMap<>();
     private CapturedPortfolio captured;
     private PortfolioModels.AdviceResponse displayedAdvice;
     private Map<Long, String> itemNames = new HashMap<>();
+    private String adviceNotice;
     private boolean updating;
+    private boolean busy;
 
     @Inject
     public FlippingTablesPanel(FlippingTablesPlugin plugin, FlippingTablesConfig config, PortfolioAdviceRepository repository) {
@@ -125,30 +128,15 @@ public class FlippingTablesPanel extends PluginPanel {
 
     public void displayPortfolio(CapturedPortfolio value) {
         updating = true;
+        saveStockSelections();
         captured = value;
         cash.setText(Long.toString(value.getWalletCoins()));
         stocks.removeAll();
         stockInputs.clear();
-        stocks.add(text(value.getOpenOffers().size() + " open offers across " + value.getTotalSlots() + " slots. Listed stock is included automatically."));
-        stocks.add(text("Select carried items you want to sell. Uncollected items and bank stock are excluded. Cost is optional; 0 means unknown."));
-        for (CapturedPortfolio.Stock stock : value.getStock()) {
-            JPanel card = column();
-            card.setBorder(new EmptyBorder(8, 0, 8, 0));
-            card.add(text(stock.getName() + " (" + stock.getItemId() + ")"));
-            card.add(text("Carried: " + stock.getCarriedQuantity() + " | Listed: " + stock.getListedQuantity()));
-            JCheckBox include = new JCheckBox("Use carried stock");
-            include.setEnabled(stock.getCarriedQuantity() > 0);
-            include.setAlignmentX(Component.LEFT_ALIGNMENT);
-            include.setOpaque(false);
-            include.setForeground(Color.WHITE);
-            JTextField cost = new JTextField("0");
-            card.add(include);
-            card.add(field("Cost per item (GP)", cost));
-            stocks.add(card);
-            stockInputs.add(new StockInput(stock.getItemId(), include, cost));
-            include.addActionListener(event -> inputChanged());
-            watch(cost);
-        }
+        stocks.add(text(value.getOpenOffers().size() + " open offers across " + value.getTotalSlots() + " slots."));
+        addListedStock(value);
+        addInventoryStock(value);
+        stocks.add(text("Uncollected items and bank stock are excluded. Cost is optional; 0 means unknown."));
         stocks.add(text("Buy limits include fills observed this session. Earlier or offline purchases may leave less allowance. Check limits in game."));
         status.setText("Portfolio ready. Review stock, budget and next visit before requesting advice.");
         setBusy(false);
@@ -156,7 +144,83 @@ public class FlippingTablesPanel extends PluginPanel {
         refresh();
     }
 
+    private void addListedStock(CapturedPortfolio value) {
+        List<CapturedPortfolio.Stock> listed = value.getStock().stream()
+                .filter(stock -> stock.getListedQuantity() > 0)
+                .collect(java.util.stream.Collectors.toList());
+        stocks.add(text("Already selling (included automatically)"));
+        if (listed.isEmpty()) {
+            stocks.add(text("No items are currently listed for sale."));
+            return;
+        }
+        for (CapturedPortfolio.Stock stock : listed) {
+            JPanel card = column();
+            card.setBorder(new EmptyBorder(6, 0, 6, 0));
+            card.add(text(stock.getName() + " (" + stock.getItemId() + ")"));
+            card.add(text(stock.getListedQuantity() + " already listed for sale"));
+            stocks.add(card);
+        }
+    }
+
+    private void addInventoryStock(CapturedPortfolio value) {
+        List<CapturedPortfolio.Stock> inventory = value.getStock().stream()
+                .filter(stock -> stock.getCarriedQuantity() > 0)
+                .collect(java.util.stream.Collectors.toList());
+        stocks.add(text("Inventory to sell"));
+        if (inventory.isEmpty()) {
+            stocks.add(text("No tradeable carried items are available to add."));
+            return;
+        }
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        controls.setAlignmentX(Component.LEFT_ALIGNMENT);
+        controls.setBackground(ColorScheme.DARK_GRAY_COLOR);
+        JButton selectAll = new JButton("Select all");
+        JButton clearSelection = new JButton("Clear selection");
+        controls.add(selectAll);
+        controls.add(Box.createHorizontalStrut(4));
+        controls.add(clearSelection);
+        stocks.add(controls);
+        for (CapturedPortfolio.Stock stock : inventory) {
+            JPanel card = column();
+            card.setBorder(new EmptyBorder(8, 0, 8, 0));
+            card.add(text(stock.getName() + " (" + stock.getItemId() + ")"));
+            card.add(text(stock.getCarriedQuantity() + " in inventory"
+                    + (stock.getListedQuantity() > 0 ? "; " + stock.getListedQuantity() + " listed stays included automatically" : "")));
+            JCheckBox include = new JCheckBox("Sell inventory");
+            include.setAlignmentX(Component.LEFT_ALIGNMENT);
+            include.setOpaque(false);
+            include.setForeground(Color.WHITE);
+            StockSelection selection = stockSelections.getOrDefault(stock.getItemId(), StockSelection.unselected());
+            include.setSelected(selection.included);
+            JTextField cost = new JTextField(selection.cost);
+            card.add(include);
+            card.add(field("Cost per item (GP)", cost));
+            stocks.add(card);
+            stockInputs.add(new StockInput(stock.getItemId(), include, cost));
+            include.addActionListener(event -> inputChanged());
+            watch(cost);
+        }
+        selectAll.addActionListener(event -> setInventorySelection(true));
+        clearSelection.addActionListener(event -> setInventorySelection(false));
+    }
+
+    private void setInventorySelection(boolean selected) {
+        updating = true;
+        stockInputs.forEach(input -> input.include.setSelected(selected));
+        updating = false;
+        inputChanged();
+    }
+
+    private void saveStockSelections() {
+        for (StockInput input : stockInputs) {
+            stockSelections.put(input.itemId, new StockSelection(input.include.isSelected(), input.cost.getText()));
+        }
+    }
+
     public void showAdvice(PortfolioModels.AdviceResponse response, Map<Long, String> names) {
+        if (displayedAdvice != response) {
+            adviceNotice = null;
+        }
         displayedAdvice = response;
         itemNames = new HashMap<>(names);
         results.removeAll();
@@ -164,7 +228,10 @@ public class FlippingTablesPanel extends PluginPanel {
         status.setText("Advice ready. Market data through " + response.getMarketDataThrough() + ".");
         results.add(text("Estimated cash committed: " + advice.getProjectedCashCommitted() + " GP. Inventory value estimate: " + advice.getConservativeInventoryValue() + " GP. These are estimates, not realised profit."));
         results.add(text("Search ft or click the coins button in GE search. Choose an item, then open its quantity or price entry and click Use suggested. Press Enter, then review and confirm the offer normally."));
-        results.add(text("Exact suggested new offers are marked Placed; continue with the remaining items. After cancelling, repricing, collecting or changing an offer differently, read your portfolio and plan again."));
+        results.add(text("Exact suggested new offers are marked Placed; continue with the remaining items. If your portfolio changes, saved advice stays visible for reference; review its suggestions against your current portfolio or request a fresh plan."));
+        if (adviceNotice != null) {
+            results.add(text(adviceNotice));
+        }
         if ("SEARCH_LIMIT_REACHED".equals(advice.getSearchStatus())) {
             results.add(text("The planner reached its search limit; this is its best result so far."));
         }
@@ -173,14 +240,16 @@ public class FlippingTablesPanel extends PluginPanel {
         }
         for (PortfolioModels.Action action : advice.getActions()) {
             boolean placed = repository.isCompleted(action);
+            boolean actionable = repository.availableActions().contains(action);
             JPanel card = column();
             card.setBorder(new EmptyBorder(10, 0, 10, 0));
             String side = repository.sideOf(action);
             String actionLabel = action.getType().startsWith("CREATE_") ? "New " + side.toLowerCase(java.util.Locale.ROOT)
                     : action.getType().toLowerCase(java.util.Locale.ROOT) + " " + side.toLowerCase(java.util.Locale.ROOT);
-            card.add(text((placed ? "Placed: " : "") + actionLabel + " - " + names.getOrDefault(action.getItemId(), "Item " + action.getItemId())));
+            String completion = placed ? (action.getType().startsWith("CREATE_") ? "Placed: " : "Done: ") : "";
+            card.add(text(completion + actionLabel + " - " + names.getOrDefault(action.getItemId(), "Item " + action.getItemId())));
             card.add(text(action.getQuantity() + " at " + action.getPricePerItem() + " GP each" + slotLabel(action.getReplacesOfferId())));
-            if (!placed && action.getType().startsWith("CREATE_")) {
+            if (actionable && isOfferSuggestion(action, side)) {
                 JButton choose = new JButton("Use this suggestion");
                 choose.addActionListener(event -> {
                     try {
@@ -193,7 +262,7 @@ public class FlippingTablesPanel extends PluginPanel {
                 choose.setAlignmentX(Component.LEFT_ALIGNMENT);
                 card.add(choose);
             }
-            if (!placed && !"KEEP".equals(action.getType()) && !"CANCEL".equals(action.getType())) {
+            if (actionable && !"KEEP".equals(action.getType()) && !"CANCEL".equals(action.getType())) {
                 JButton copyQuantity = new JButton("Copy quantity");
                 copyQuantity.addActionListener(event -> copy(Long.toString(action.getQuantity())));
                 copyQuantity.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -216,11 +285,26 @@ public class FlippingTablesPanel extends PluginPanel {
         if (displayedAdvice == null) {
             return;
         }
-        captured = null;
-        stocks.removeAll();
-        stockInputs.clear();
         showAdvice(displayedAdvice, itemNames);
-        status.setText("Plan progress updated. Continue the remaining suggestions, or read your portfolio to replan.");
+        status.setText(repository.isActionable()
+                ? "Plan progress updated. Continue the remaining suggestions, or read your portfolio to replan."
+                : "Existing advice is retained for reference; request a fresh plan before using suggestions.");
+    }
+
+    public void showAdviceStatus(String message) {
+        adviceNotice = message;
+        if (displayedAdvice != null) {
+            showAdvice(displayedAdvice, itemNames);
+        }
+        status.setText(message);
+        setBusy(false);
+        refresh();
+    }
+
+    public void showPlanStale(String message) {
+        boolean wasBusy = busy;
+        showAdviceStatus(message);
+        setBusy(wasBusy);
     }
 
     public void invalidateAdvice(String message, boolean clearPortfolio) {
@@ -231,6 +315,7 @@ public class FlippingTablesPanel extends PluginPanel {
             captured = null;
             stocks.removeAll();
             stockInputs.clear();
+            stockSelections.clear();
         }
         if (message != null) {
             status.setText(message);
@@ -240,7 +325,10 @@ public class FlippingTablesPanel extends PluginPanel {
     }
 
     public void showError(String message) {
-        status.setText(message == null ? "Unable to get advice. Try reading your portfolio again." : message);
+        String error = message == null ? "Unable to get advice. Try reading your portfolio again." : message;
+        status.setText(displayedAdvice != null && !repository.isActionable()
+                ? error + " Existing advice is retained for reference; request a fresh plan before using suggestions."
+                : error);
         setBusy(false);
         refresh();
     }
@@ -251,6 +339,7 @@ public class FlippingTablesPanel extends PluginPanel {
     }
 
     public void setBusy(boolean busy) {
+        this.busy = busy;
         read.setEnabled(!busy);
         calculate.setEnabled(!busy && captured != null);
         calculate.setText(busy ? "Working..." : "Plan next visit");
@@ -278,6 +367,7 @@ public class FlippingTablesPanel extends PluginPanel {
         recordOffers.setSelected(false);
         captured = null;
         stockInputs.clear();
+        stockSelections.clear();
         results.removeAll();
         stocks.removeAll();
     }
@@ -301,6 +391,12 @@ public class FlippingTablesPanel extends PluginPanel {
                     selected.add(input.itemId);
                 }
                 costs.put(input.itemId, VisitInputs.wholeNumber(input.cost.getText(), "Item cost"));
+            }
+            for (CapturedPortfolio.Stock stock : captured.getStock()) {
+                StockSelection selection = stockSelections.get(stock.getItemId());
+                if (stock.getListedQuantity() > 0 && selection != null && !costs.containsKey(stock.getItemId())) {
+                    costs.put(stock.getItemId(), VisitInputs.wholeNumber(selection.cost, "Item cost"));
+                }
             }
             plugin.requestAdvice(captured, selected, costs, VisitInputs.wholeNumber(cash.getText(), "Cash budget"),
                     VisitInputs.visitInterval(hours.getText()), VisitInputs.visitInterval(followingHours.getText()), apiToken);
@@ -418,6 +514,10 @@ public class FlippingTablesPanel extends PluginPanel {
         return " (existing offer)";
     }
 
+    private static boolean isOfferSuggestion(PortfolioModels.Action action, String side) {
+        return action.getType().startsWith("CREATE_") || ("REPRICE".equals(action.getType()) && !side.isEmpty());
+    }
+
     private static class StockInput {
         private final long itemId;
         private final JCheckBox include;
@@ -427,6 +527,20 @@ public class FlippingTablesPanel extends PluginPanel {
             this.itemId = itemId;
             this.include = include;
             this.cost = cost;
+        }
+    }
+
+    private static class StockSelection {
+        private final boolean included;
+        private final String cost;
+
+        private StockSelection(boolean included, String cost) {
+            this.included = included;
+            this.cost = cost;
+        }
+
+        private static StockSelection unselected() {
+            return new StockSelection(false, "0");
         }
     }
 }

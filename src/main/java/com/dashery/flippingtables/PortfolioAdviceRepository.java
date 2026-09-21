@@ -16,6 +16,7 @@ public class PortfolioAdviceRepository {
     private PortfolioModels.Snapshot snapshot;
     private PortfolioModels.Action selected;
     private Instant savedAt;
+    private boolean stale;
     private final Set<PortfolioModels.Action> completed = new HashSet<>();
 
     public synchronized void save(PortfolioModels.AdviceResponse response, PortfolioModels.Snapshot snapshot) {
@@ -23,6 +24,7 @@ public class PortfolioAdviceRepository {
         this.snapshot = snapshot;
         this.savedAt = Instant.now();
         this.selected = null;
+        this.stale = false;
         completed.clear();
     }
 
@@ -31,6 +33,7 @@ public class PortfolioAdviceRepository {
         snapshot = null;
         selected = null;
         savedAt = null;
+        stale = false;
         completed.clear();
     }
 
@@ -38,23 +41,42 @@ public class PortfolioAdviceRepository {
         return savedAt != null && !Instant.now().isBefore(savedAt.plus(Duration.ofMinutes(5)));
     }
 
+    public synchronized void markStale() {
+        if (response != null) {
+            stale = true;
+        }
+    }
+
+    public synchronized boolean isActionable() {
+        return response != null && !isExpired();
+    }
+
+    public synchronized boolean hasAdvice() {
+        return response != null;
+    }
+
+    public synchronized boolean isStale() {
+        return stale;
+    }
+
     public synchronized void select(PortfolioModels.Action action) {
-        if (response == null || isExpired() || completed.contains(action) || !response.getAdvice().getActions().contains(action)) {
+        if (!isActionable() || !isOfferSuggestion(action) || completed.contains(action)
+                || !response.getAdvice().getActions().contains(action)) {
             throw new IllegalStateException("Request fresh advice before selecting a suggestion.");
         }
         selected = action;
     }
 
     public synchronized Optional<PortfolioModels.Action> selectedFor(int itemId, String side) {
-        if (response == null || isExpired()) {
+        if (!isActionable()) {
             return Optional.empty();
         }
         if (selected != null && !completed.contains(selected) && selected.getItemId() == itemId
-                && selected.getType().equals("CREATE_" + side)) {
+                && matchesSide(selected, side)) {
             return Optional.of(selected);
         }
         List<PortfolioModels.Action> matching = availableActions().stream()
-                .filter(action -> action.getItemId() == itemId && action.getType().equals("CREATE_" + side))
+                .filter(action -> action.getItemId() == itemId && matchesSide(action, side))
                 .collect(Collectors.toList());
         return matching.size() == 1 ? Optional.of(matching.get(0)) : Optional.empty();
     }
@@ -73,7 +95,7 @@ public class PortfolioAdviceRepository {
     }
 
     public synchronized List<PortfolioModels.Action> availableActions() {
-        if (response == null || isExpired()) {
+        if (!isActionable()) {
             return Collections.emptyList();
         }
         return response.getAdvice().getActions().stream().filter(action -> !completed.contains(action))
@@ -81,7 +103,7 @@ public class PortfolioAdviceRepository {
     }
 
     public synchronized short[] buyItemIds() {
-        if (response == null || isExpired()) {
+        if (!isActionable()) {
             return new short[0];
         }
         int[] ids = availableActions().stream()
@@ -124,5 +146,15 @@ public class PortfolioAdviceRepository {
                         && action.getPricePerItem() == price)
                 .collect(Collectors.toList());
         return matches.size() == 1 ? matches.get(0).getRecommendationId() : null;
+    }
+
+    private boolean matchesSide(PortfolioModels.Action action, String side) {
+        return action.getType().equals("CREATE_" + side)
+                || ("REPRICE".equals(action.getType()) && side.equals(sideOf(action)));
+    }
+
+    private static boolean isOfferSuggestion(PortfolioModels.Action action) {
+        return action != null && ("CREATE_BUY".equals(action.getType()) || "CREATE_SELL".equals(action.getType())
+                || "REPRICE".equals(action.getType()));
     }
 }

@@ -117,9 +117,12 @@ public final class PortfolioCaptureService {
             }
             GrandExchangeOfferState state = offer.getState();
             boolean completed = state == GrandExchangeOfferState.BOUGHT || state == GrandExchangeOfferState.SOLD;
-            if ((completed && !includeCompleted)
-                    || state == GrandExchangeOfferState.CANCELLED_BUY || state == GrandExchangeOfferState.CANCELLED_SELL) {
+            boolean cancelled = state == GrandExchangeOfferState.CANCELLED_BUY || state == GrandExchangeOfferState.CANCELLED_SELL;
+            if ((completed || cancelled) && !includeCompleted) {
                 throw new IllegalStateException("Collect finished Grand Exchange offers before capturing a portfolio.");
+            }
+            if (cancelled) {
+                continue;
             }
             if (state != GrandExchangeOfferState.BUYING && state != GrandExchangeOfferState.SELLING && !completed) {
                 continue;
