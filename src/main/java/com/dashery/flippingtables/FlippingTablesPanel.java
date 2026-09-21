@@ -28,6 +28,7 @@ package com.dashery.flippingtables;
 
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.util.LinkBrowser;
 
 import javax.inject.Inject;
 import javax.swing.*;
@@ -49,12 +50,16 @@ public class FlippingTablesPanel extends PluginPanel {
     private final PortfolioAdviceRepository repository;
     private final JPasswordField token = new JPasswordField();
     private final JTextField hours = new JTextField();
+    private final JTextField followingHours = new JTextField();
     private final JTextField cash = new JTextField("0");
     private final JCheckBox consent = new JCheckBox("Send portfolio for advice");
+    private final JCheckBox recordOffers = new JCheckBox("Record Grand Exchange offers");
     private final JButton read = new JButton("Read current portfolio");
     private final JButton calculate = new JButton("Plan next visit");
+    private final JButton viewResults = new JButton("View offer results");
     private final JTextArea disclosure = text("");
     private final JTextArea status = text("Log in, collect finished offers, then read your portfolio.");
+    private final JTextArea recordingStatus = text("Offer recording is off.");
     private final JPanel stocks = column();
     private final JPanel results = column();
     private final List<StockInput> stockInputs = new ArrayList<>();
@@ -75,21 +80,32 @@ public class FlippingTablesPanel extends PluginPanel {
         add(field("API token (kept in memory)", token));
         hours.setText(Integer.toString(config.nextVisitHours()));
         add(field("Hours until next visit", hours));
+        followingHours.setText(Integer.toString(config.followingVisitHours()));
+        add(field("Hours after next visit", followingHours));
         add(field("Cash budget (carried GP)", cash));
         add(consent);
+        add(recordOffers);
+        add(text("Save GE trades to your Flipping Tables API. Account names are not sent."));
+        add(recordingStatus);
         add(Box.createVerticalStrut(8));
         add(read);
         add(stocks);
         add(Box.createVerticalStrut(8));
         add(calculate);
         add(status);
+        add(viewResults);
         add(results);
         calculate.setEnabled(false);
         consent.setAlignmentX(Component.LEFT_ALIGNMENT);
         consent.setOpaque(false);
         consent.setForeground(Color.WHITE);
+        recordOffers.setAlignmentX(Component.LEFT_ALIGNMENT);
+        recordOffers.setOpaque(false);
+        recordOffers.setForeground(Color.WHITE);
+        recordOffers.setSelected(config.recordOffers());
         read.setAlignmentX(Component.LEFT_ALIGNMENT);
         calculate.setAlignmentX(Component.LEFT_ALIGNMENT);
+        viewResults.setAlignmentX(Component.LEFT_ALIGNMENT);
         updateDisclosure();
         String environmentToken = System.getenv("FLIPPING_TABLES_API_TOKEN");
         if (environmentToken != null) {
@@ -97,10 +113,14 @@ public class FlippingTablesPanel extends PluginPanel {
         }
         read.addActionListener(event -> plugin.readPortfolio());
         calculate.addActionListener(event -> submit());
+        viewResults.addActionListener(event -> LinkBrowser.browse(resultsUrl()));
         consent.addActionListener(event -> inputChanged());
+        recordOffers.addActionListener(event -> recordingChanged());
         watch(hours);
+        watch(followingHours);
         watch(cash);
         watch(token);
+        recordingChanged();
     }
 
     public void displayPortfolio(CapturedPortfolio value) {
@@ -225,6 +245,11 @@ public class FlippingTablesPanel extends PluginPanel {
         refresh();
     }
 
+    public void setRecordingStatus(String message) {
+        recordingStatus.setText(message);
+        refresh();
+    }
+
     public void setBusy(boolean busy) {
         read.setEnabled(!busy);
         calculate.setEnabled(!busy && captured != null);
@@ -235,13 +260,22 @@ public class FlippingTablesPanel extends PluginPanel {
         if (endpointChanged) {
             token.setText("");
             consent.setSelected(false);
+            recordOffers.setSelected(false);
         }
         updateDisclosure();
+    }
+
+    public void recordingConfigurationChanged(boolean enabled) {
+        updating = true;
+        recordOffers.setSelected(enabled);
+        updating = false;
+        recordingChanged();
     }
 
     public void shutdown() {
         token.setText("");
         consent.setSelected(false);
+        recordOffers.setSelected(false);
         captured = null;
         stockInputs.clear();
         results.removeAll();
@@ -269,7 +303,7 @@ public class FlippingTablesPanel extends PluginPanel {
                 costs.put(input.itemId, VisitInputs.wholeNumber(input.cost.getText(), "Item cost"));
             }
             plugin.requestAdvice(captured, selected, costs, VisitInputs.wholeNumber(cash.getText(), "Cash budget"),
-                    VisitInputs.visitInterval(hours.getText()), apiToken);
+                    VisitInputs.visitInterval(hours.getText()), VisitInputs.visitInterval(followingHours.getText()), apiToken);
         } catch (RuntimeException error) {
             showError(error.getMessage());
         }
@@ -281,11 +315,27 @@ public class FlippingTablesPanel extends PluginPanel {
         }
     }
 
+    private void recordingChanged() {
+        plugin.configureOfferRecording(recordOffers.isSelected(), new String(token.getPassword()).trim());
+    }
+
+    private String resultsUrl() {
+        String api = config.apiBaseUrl().replaceAll("/api/?$", "");
+        return api + "/#results";
+    }
+
     private void watch(JTextField input) {
         input.getDocument().addDocumentListener(new DocumentListener() {
-            public void insertUpdate(DocumentEvent event) { inputChanged(); }
-            public void removeUpdate(DocumentEvent event) { inputChanged(); }
-            public void changedUpdate(DocumentEvent event) { inputChanged(); }
+            public void insertUpdate(DocumentEvent event) { changed(); }
+            public void removeUpdate(DocumentEvent event) { changed(); }
+            public void changedUpdate(DocumentEvent event) { changed(); }
+
+            private void changed() {
+                inputChanged();
+                if (input == token && recordOffers.isSelected()) {
+                    recordingChanged();
+                }
+            }
         });
     }
 

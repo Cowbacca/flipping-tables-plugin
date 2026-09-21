@@ -28,6 +28,8 @@ import com.google.inject.Provides;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.InventoryID;
+import net.runelite.api.GrandExchangeOffer;
+import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.ScriptID;
 import net.runelite.api.VarClientInt;
 import net.runelite.api.VarClientStr;
@@ -77,6 +79,8 @@ public class FlippingTablesPlugin extends Plugin {
     @Inject private ItemManager itemManager;
     @Inject private GeLimitsTracker geLimitsTracker;
     @Inject private GeSearchButton geSearchButton;
+    @Inject private OfferResultsRecorder offerResultsRecorder;
+    @Inject private ConfigManager configManager;
 
     private final AtomicLong generation = new AtomicLong();
     private NavigationButton navigation;
@@ -100,6 +104,7 @@ public class FlippingTablesPlugin extends Plugin {
             thread.setDaemon(true);
             return thread;
         });
+        offerResultsRecorder.setStatusListener(message -> onPanel(generation.get(), () -> panel.setRecordingStatus(message)));
         SwingUtilities.invokeLater(() -> {
             if (!running) {
                 return;
@@ -126,6 +131,7 @@ public class FlippingTablesPlugin extends Plugin {
         });
         planProgress = null;
         geLimitsTracker.resetSession();
+        offerResultsRecorder.shutDown();
         if (worker != null) {
             worker.shutdownNow();
         }
@@ -159,7 +165,7 @@ public class FlippingTablesPlugin extends Plugin {
     }
 
     public void requestAdvice(CapturedPortfolio displayed, Set<Long> selected, Map<Long, Long> costs,
-            long cashBudget, Duration interval, String token) {
+            long cashBudget, Duration nextVisitInterval, Duration followingVisitInterval, String token) {
         invalidate(null, false);
         long requestGeneration = generation.get();
         panel.setBusy(true);
@@ -169,8 +175,12 @@ public class FlippingTablesPlugin extends Plugin {
                 if (!captured.getFingerprint().equals(displayed.getFingerprint())) {
                     throw new IllegalStateException("Your portfolio changed. Read it again before requesting advice.");
                 }
+                if (offerResultsRecorder.isRecordingEnabled() && offerResultsRecorder.accountId() == null) {
+                    throw new IllegalStateException("Wait for offer recording to identify this account before requesting advice.");
+                }
                 PortfolioModels.AdviceRequest request = PortfolioRequestBuilder.create(
-                        captured, selected, costs, cashBudget, interval, config.volumeParticipationPercent());
+                        captured, selected, costs, cashBudget, nextVisitInterval, followingVisitInterval,
+                        config.volumeParticipationPercent(), offerResultsRecorder.accountId());
                 lastCapture = captured;
                 worker.submit(() -> {
                     if (!isCurrent(requestGeneration)) {
@@ -191,6 +201,13 @@ public class FlippingTablesPlugin extends Plugin {
 
     public void inputsChanged() {
         invalidate("Inputs changed. Request advice again when ready.", false);
+    }
+
+    public void configureOfferRecording(boolean enabled, String token) {
+        if (config.recordOffers() != enabled) {
+            configManager.setConfiguration("flippingtables", "recordOffers", enabled);
+        }
+        offerResultsRecorder.configure(enabled, config.apiBaseUrl(), token);
     }
 
     private void acceptAdvice(long requestGeneration, CapturedPortfolio captured,
@@ -218,6 +235,16 @@ public class FlippingTablesPlugin extends Plugin {
     @Subscribe
     public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged event) {
         geLimitsTracker.onGrandExchangeOfferChanged(event);
+        if (offerResultsRecorder != null && client.getGameState() == GameState.LOGGED_IN && isNormalWorld()) {
+            GrandExchangeOffer offer = event.getOffer();
+            if (offer != null && offer.getState() == GrandExchangeOfferState.EMPTY) {
+                offerResultsRecorder.clear(event.getSlot(), false);
+            } else if (offer != null) {
+                OfferSnapshot snapshot = offerSnapshot(event.getSlot(), offer);
+                offerResultsRecorder.observe(snapshot, repository.exactRecommendationIdFor(snapshot.itemId, snapshot.side,
+                        snapshot.totalQuantity, snapshot.pricePerItem), false);
+            }
+        }
         portfolioChanged = true;
     }
 
@@ -236,11 +263,17 @@ public class FlippingTablesPlugin extends Plugin {
         if (event.getGameState() != GameState.LOGGED_IN) {
             invalidate("Read your portfolio after logging in or returning to the game.", true);
             geSearchButton.reset();
+            if (offerResultsRecorder != null) {
+                offerResultsRecorder.deactivate();
+            }
         }
     }
 
     @Subscribe
     public void onGameTick(GameTick event) {
+        if (offerResultsRecorder != null && client.getGameState() == GameState.LOGGED_IN && isNormalWorld()) {
+            activateOfferRecorder();
+        }
         if (portfolioChanged) {
             portfolioChanged = false;
             invalidateIfPortfolioChanged();
@@ -259,12 +292,23 @@ public class FlippingTablesPlugin extends Plugin {
     @Subscribe
     public void onConfigChanged(ConfigChanged event) {
         if ("flippingtables".equals(event.getGroup())) {
+            if ("recordOffers".equals(event.getKey())) {
+                SwingUtilities.invokeLater(() -> {
+                    if (panel != null) {
+                        panel.recordingConfigurationChanged(config.recordOffers());
+                    }
+                });
+                return;
+            }
             invalidate("Configuration changed. Request a fresh plan.", false);
             SwingUtilities.invokeLater(() -> {
                 if (panel != null) {
                     panel.configurationChanged("apiBaseUrl".equals(event.getKey()));
                 }
             });
+            if (offerResultsRecorder != null && "apiBaseUrl".equals(event.getKey())) {
+                offerResultsRecorder.configure(false, config.apiBaseUrl(), "");
+            }
         }
     }
 
@@ -355,5 +399,40 @@ public class FlippingTablesPlugin extends Plugin {
                 operation.run();
             }
         });
+    }
+
+    private void activateOfferRecorder() {
+        String profileKey = configManager.getRSProfileKey();
+        GrandExchangeOffer[] offers = client.getGrandExchangeOffers();
+        if (profileKey == null || offers == null) {
+            return;
+        }
+        java.util.List<OfferSnapshot> snapshots = new java.util.ArrayList<>();
+        for (int slot = 0; slot < offers.length; slot++) {
+            GrandExchangeOffer offer = offers[slot];
+            if (offer != null && offer.getState() != GrandExchangeOfferState.EMPTY) {
+                snapshots.add(offerSnapshot(slot, offer));
+            }
+        }
+        offerResultsRecorder.activate(profileKey, snapshots, offers.length);
+    }
+
+    private OfferSnapshot offerSnapshot(int slot, GrandExchangeOffer offer) {
+        GrandExchangeOfferState state = offer.getState();
+        String side = state == GrandExchangeOfferState.BUYING || state == GrandExchangeOfferState.BOUGHT
+                || state == GrandExchangeOfferState.CANCELLED_BUY ? "BUY" : "SELL";
+        String resultState = state == GrandExchangeOfferState.BOUGHT || state == GrandExchangeOfferState.SOLD ? "FILLED"
+                : state == GrandExchangeOfferState.CANCELLED_BUY || state == GrandExchangeOfferState.CANCELLED_SELL ? "CANCELLED" : "OPEN";
+        return new OfferSnapshot(slot, offer.getItemId(), side, resultState, offer.getPrice(), offer.getTotalQuantity(),
+                offer.getQuantitySold(), offer.getSpent());
+    }
+
+    private boolean isNormalWorld() {
+        java.util.EnumSet<net.runelite.api.WorldType> worlds = client.getWorldType();
+        return worlds != null && !worlds.contains(net.runelite.api.WorldType.DEADMAN)
+                && !worlds.contains(net.runelite.api.WorldType.SEASONAL)
+                && !worlds.contains(net.runelite.api.WorldType.TOURNAMENT_WORLD)
+                && !worlds.contains(net.runelite.api.WorldType.FRESH_START_WORLD)
+                && !worlds.contains(net.runelite.api.WorldType.BETA_WORLD);
     }
 }

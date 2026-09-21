@@ -118,21 +118,33 @@ public final class PortfolioModels
 	{
 		private final Snapshot snapshot;
 		private final String nextVisitInterval;
+		private final String followingVisitInterval;
 		private final long volumeParticipationPercent;
 		private final boolean members;
+		private final String accountId;
 
 		public AdviceRequest(Snapshot snapshot, String nextVisitInterval, long volumeParticipationPercent, boolean members)
 		{
+			this(snapshot, nextVisitInterval, nextVisitInterval, volumeParticipationPercent, members, null);
+		}
+
+		public AdviceRequest(Snapshot snapshot, String nextVisitInterval, String followingVisitInterval,
+				long volumeParticipationPercent, boolean members, String accountId)
+		{
 			this.snapshot = snapshot;
 			this.nextVisitInterval = nextVisitInterval;
+			this.followingVisitInterval = followingVisitInterval;
 			this.volumeParticipationPercent = volumeParticipationPercent;
 			this.members = members;
+			this.accountId = accountId;
 		}
 
 		public Snapshot getSnapshot() { return snapshot; }
 		public String getNextVisitInterval() { return nextVisitInterval; }
+		public String getFollowingVisitInterval() { return followingVisitInterval; }
 		public long getVolumeParticipationPercent() { return volumeParticipationPercent; }
 		public boolean isMembers() { return members; }
+		public String getAccountId() { return accountId; }
 	}
 
 	public static final class AdviceResponse
@@ -190,14 +202,21 @@ public final class PortfolioModels
 		private final long quantity;
 		private final long pricePerItem;
 		private final String replacesOfferId;
+		private final String recommendationId;
 
 		public Action(String type, long itemId, long quantity, long pricePerItem, String replacesOfferId)
+		{
+			this(type, itemId, quantity, pricePerItem, replacesOfferId, null);
+		}
+
+		public Action(String type, long itemId, long quantity, long pricePerItem, String replacesOfferId, String recommendationId)
 		{
 			this.type = type;
 			this.itemId = itemId;
 			this.quantity = quantity;
 			this.pricePerItem = pricePerItem;
 			this.replacesOfferId = replacesOfferId;
+			this.recommendationId = recommendationId;
 		}
 
 		public String getType() { return type; }
@@ -205,5 +224,6 @@ public final class PortfolioModels
 		public long getQuantity() { return quantity; }
 		public long getPricePerItem() { return pricePerItem; }
 		public String getReplacesOfferId() { return replacesOfferId; }
+		public String getRecommendationId() { return recommendationId; }
 	}
 }

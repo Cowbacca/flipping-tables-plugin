@@ -111,4 +111,18 @@ public class PortfolioAdviceRepository {
                 .map(PortfolioModels.OpenOffer::getSide)
                 .findFirst().orElse("");
     }
+
+    public synchronized String exactRecommendationIdFor(int itemId, String side, int quantity, int price) {
+        if (response == null || isExpired()) {
+            return null;
+        }
+        List<PortfolioModels.Action> matches = availableActions().stream()
+                .filter(action -> action.getRecommendationId() != null && action.getItemId() == itemId
+                        && (action.getType().equals("CREATE_" + side)
+                                || ("REPRICE".equals(action.getType()) && side.equals(sideOf(action))))
+                        && action.getQuantity() == quantity
+                        && action.getPricePerItem() == price)
+                .collect(Collectors.toList());
+        return matches.size() == 1 ? matches.get(0).getRecommendationId() : null;
+    }
 }

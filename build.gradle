@@ -35,7 +35,7 @@ dependencies {
 }
 
 group = 'com.dashery.flippingtables'
-version = '2.0.3'
+version = '2.1.0'
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
@@ -48,6 +48,12 @@ tasks.register('run', JavaExec) {
 
     jvmArgs '-ea'
     args '--developer-mode', '--debug'
+}
+
+tasks.register('panelPreview', JavaExec) {
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.dashery.flippingtables.PanelPreview'
+    args layout.buildDirectory.dir('panel-preview').get().asFile.absolutePath
 }
 
 tasks.register('shadowJar', Jar) {

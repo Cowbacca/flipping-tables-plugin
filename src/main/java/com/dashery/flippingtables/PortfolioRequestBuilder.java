@@ -11,12 +11,14 @@ public final class PortfolioRequestBuilder {
     }
 
     public static PortfolioModels.AdviceRequest create(CapturedPortfolio captured, Set<Long> selectedStock,
-            Map<Long, Long> costs, long cashBudget, Duration interval, int participation) {
+            Map<Long, Long> costs, long cashBudget, Duration nextVisitInterval, Duration followingVisitInterval,
+            int participation, String accountId) {
         if (cashBudget < 0 || cashBudget > captured.getWalletCoins()) {
             throw new IllegalArgumentException("Cash budget must be between zero and the coins in your inventory. Collect or withdraw coins, then read the portfolio again.");
         }
-        if (interval.compareTo(Duration.ofMinutes(5)) < 0 || interval.compareTo(Duration.ofDays(7)) > 0) {
-            throw new IllegalArgumentException("Next visit must be between five minutes and seven days away.");
+        if (nextVisitInterval.compareTo(Duration.ofMinutes(5)) < 0 || nextVisitInterval.compareTo(Duration.ofDays(7)) > 0
+                || followingVisitInterval.compareTo(Duration.ofMinutes(5)) < 0 || followingVisitInterval.compareTo(Duration.ofDays(7)) > 0) {
+            throw new IllegalArgumentException("Each visit interval must be between five minutes and seven days away.");
         }
         if (participation < 1 || participation > 100) {
             throw new IllegalArgumentException("Volume participation must be between 1 and 100 percent.");
@@ -37,6 +39,12 @@ public final class PortfolioRequestBuilder {
         PortfolioModels.Snapshot snapshot = new PortfolioModels.Snapshot(
                 cashBudget, inventory, captured.getOpenOffers(), captured.getTotalSlots(),
                 captured.getLimits(), captured.getCapturedAt());
-        return new PortfolioModels.AdviceRequest(snapshot, interval.toString(), participation, captured.isMembers());
+        return new PortfolioModels.AdviceRequest(snapshot, nextVisitInterval.toString(), followingVisitInterval.toString(),
+                participation, captured.isMembers(), accountId);
+    }
+
+    public static PortfolioModels.AdviceRequest create(CapturedPortfolio captured, Set<Long> selectedStock,
+            Map<Long, Long> costs, long cashBudget, Duration interval, int participation) {
+        return create(captured, selectedStock, costs, cashBudget, interval, interval, participation, null);
     }
 }

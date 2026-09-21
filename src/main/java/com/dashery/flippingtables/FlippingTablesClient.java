@@ -41,6 +41,7 @@ public class FlippingTablesClient
 	private static final Set<String> ACTION_TYPES = new HashSet<>(Arrays.asList("KEEP", "CANCEL", "REPRICE", "CREATE_BUY", "CREATE_SELL"));
 
 	private final OkHttpClient client;
+	private final OkHttpClient recordingClient;
 	private final FlippingTablesConfig config;
 	private final Gson gson = new Gson();
 	private volatile Call pendingCall;
@@ -57,6 +58,12 @@ public class FlippingTablesClient
 			.followSslRedirects(false)
 			.build();
 		this.config = config;
+		this.recordingClient = this.client.newBuilder()
+			.connectTimeout(10, TimeUnit.SECONDS)
+			.readTimeout(10, TimeUnit.SECONDS)
+			.writeTimeout(10, TimeUnit.SECONDS)
+			.callTimeout(10, TimeUnit.SECONDS)
+			.build();
 	}
 
 	public PortfolioModels.AdviceResponse requestPortfolioAdvice(PortfolioModels.AdviceRequest request, String token) throws IOException
@@ -101,6 +108,39 @@ public class FlippingTablesClient
 		}
 	}
 
+	public IngestResult submitTradeObservations(String destination, String accountId, java.util.List<TradeObservation> observations, String token) throws IOException
+	{
+		if (accountId == null || !accountId.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
+		{
+			throw new IOException("Recorded offer account is invalid");
+		}
+		if (observations == null || observations.isEmpty() || observations.size() > 100)
+		{
+			throw new IOException("Recorded offer batch is invalid");
+		}
+		validateToken(token);
+		JsonObject body = new JsonObject();
+		body.addProperty("accountId", accountId);
+		body.add("observations", gson.toJsonTree(observations));
+		Request request = new Request.Builder()
+			.url(observationsUrl(destination))
+			.header("Authorization", "Bearer " + token)
+			.header("Accept", "application/json")
+			.post(RequestBody.create(JSON, gson.toJson(body)))
+			.build();
+		try (Response response = recordingClient.newCall(request).execute())
+		{
+			if (!response.isSuccessful())
+			{
+				throw httpFailure(response);
+			}
+			JsonObject result = new JsonParser().parse(readBody(response.body())).getAsJsonObject();
+			long accepted = requireLong(result, "accepted", 0, observations.size());
+			long duplicates = requireLong(result, "duplicates", 0, observations.size());
+			return new IngestResult((int) accepted, (int) duplicates);
+		}
+	}
+
 	private void validateToken(String token)
 	{
 		if (token == null || token.trim().isEmpty())
@@ -118,6 +158,16 @@ public class FlippingTablesClient
 
 	private HttpUrl adviceUrl(String configured) throws IOException
 	{
+		return endpoint(configured, "portfolio-snapshots/advice");
+	}
+
+	private HttpUrl observationsUrl(String configured) throws IOException
+	{
+		return endpoint(configured, "trade-observations");
+	}
+
+	private HttpUrl endpoint(String configured, String path) throws IOException
+	{
 		if (configured == null || configured.trim().isEmpty())
 		{
 			throw new IOException("Configured API base URL is missing");
@@ -132,7 +182,19 @@ public class FlippingTablesClient
 		{
 			throw new IOException("Configured API base URL must use HTTPS, except loopback HTTP");
 		}
-		return base.newBuilder().addPathSegments("portfolio-snapshots/advice").build();
+		return base.newBuilder().addPathSegments(path).build();
+	}
+
+	public static final class IngestResult
+	{
+		final int accepted;
+		final int duplicates;
+
+		IngestResult(int accepted, int duplicates)
+		{
+			this.accepted = accepted;
+			this.duplicates = duplicates;
+		}
 	}
 
 	private PortfolioModels.AdviceResponse parse(String body) throws IOException
@@ -199,6 +261,14 @@ public class FlippingTablesClient
 			else
 			{
 				requireOptionalString(action, "replacesOfferId");
+			}
+			if (action.has("recommendationId") && !action.get("recommendationId").isJsonNull())
+			{
+				String recommendationId = requireString(action, "recommendationId", false, 36);
+				if (!recommendationId.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"))
+				{
+					throw new IOException("Advice response contains an invalid recommendationId");
+				}
 			}
 		}
 	}

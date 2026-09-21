@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path -Parent $PSScriptRoot
-$jarPath = Join-Path $projectDirectory 'build/libs/flippingtables-2.0.3-all.jar'
+$jarPath = Join-Path $projectDirectory 'build/libs/flippingtables-2.1.0-all.jar'
 $runtimeDirectory = Join-Path $env:LOCALAPPDATA 'RuneLite/jre/bin'
 $javaPath = Join-Path $runtimeDirectory 'java.exe'
 
@@ -38,7 +38,7 @@ try {
     } else {
         $arguments += '--developer-mode'
         $javaWindowPath = Join-Path $runtimeDirectory 'javaw.exe'
-        Start-Process -FilePath $javaWindowPath -ArgumentList $arguments -WorkingDirectory $projectDirectory | Out-Null
+        Start-Process -FilePath $javaWindowPath -ArgumentList $arguments -WorkingDirectory $projectDirectory -WindowStyle Hidden | Out-Null
     }
 } finally {
     if ($null -eq $previousToken) {

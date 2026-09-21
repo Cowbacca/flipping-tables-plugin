@@ -5,6 +5,7 @@ import com.google.inject.Guice;
 import com.google.inject.Injector;
 import net.runelite.api.Client;
 import net.runelite.client.callback.ClientThread;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ClientToolbar;
 import okhttp3.OkHttpClient;
@@ -24,6 +25,7 @@ public class PluginInjectionTest {
                 bind(ClientToolbar.class).toInstance(mock(ClientToolbar.class));
                 bind(OkHttpClient.class).toInstance(new OkHttpClient());
                 bind(FlippingTablesConfig.class).toInstance(new FlippingTablesConfig() {});
+                bind(ConfigManager.class).toInstance(mock(ConfigManager.class));
             }
         });
         assertNotNull(injector.getInstance(FlippingTablesPlugin.class));

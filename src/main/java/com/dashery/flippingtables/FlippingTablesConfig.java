@@ -55,6 +55,28 @@ public interface FlippingTablesConfig extends Config
 
 	@ConfigItem(
 			position = 3,
+			keyName = "followingVisitHours",
+			name = "Hours until following visit",
+			description = "Default interval between the next visit and the following visit; defaults to the next-visit value"
+	)
+	default int followingVisitHours()
+	{
+		return nextVisitHours();
+	}
+
+	@ConfigItem(
+			position = 4,
+			keyName = "recordOffers",
+			name = "Record GE offers",
+			description = "Record Grand Exchange offer counters and sync them to the configured Flipping Tables API"
+	)
+	default boolean recordOffers()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+			position = 5,
 			keyName = "volumeParticipationPercent",
 			name = "Volume participation (%)",
 			description = "Conservative share of observed trade volume used for estimates, from 1 to 100"
