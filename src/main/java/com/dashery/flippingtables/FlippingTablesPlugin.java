@@ -247,6 +247,9 @@ public class FlippingTablesPlugin extends Plugin {
             for (PortfolioModels.Action action : response.getAdvice().getActions()) {
                 names.put(action.getItemId(), itemManager.getItemComposition(Math.toIntExact(action.getItemId())).getName());
             }
+            for (PortfolioModels.InventoryGuidance guidance : response.getAdvice().getInventoryGuidance()) {
+                names.putIfAbsent(guidance.getItemId(), itemManager.getItemComposition(Math.toIntExact(guidance.getItemId())).getName());
+            }
             repository.save(response, request.getSnapshot());
             expiryNotified = false;
             planProgress = PortfolioPlanProgress.start(captured, response.getAdvice().getActions());

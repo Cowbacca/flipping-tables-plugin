@@ -37,10 +37,13 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.datatransfer.StringSelection;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -238,6 +241,7 @@ public class FlippingTablesPanel extends PluginPanel {
         if (advice.getActions().isEmpty()) {
             results.add(text("No suitable actions found for this portfolio and current market data."));
         }
+        Map<Long, PortfolioModels.InventoryGuidance> guidanceByItem = guidanceByItem(advice.getInventoryGuidance());
         for (PortfolioModels.Action action : advice.getActions()) {
             boolean placed = repository.isCompleted(action);
             boolean actionable = repository.availableActions().contains(action);
@@ -248,7 +252,11 @@ public class FlippingTablesPanel extends PluginPanel {
                     : action.getType().toLowerCase(java.util.Locale.ROOT) + " " + side.toLowerCase(java.util.Locale.ROOT);
             String completion = placed ? (action.getType().startsWith("CREATE_") ? "Placed: " : "Done: ") : "";
             card.add(text(completion + actionLabel + " - " + names.getOrDefault(action.getItemId(), "Item " + action.getItemId())));
-            card.add(text(action.getQuantity() + " at " + action.getPricePerItem() + " GP each" + slotLabel(action.getReplacesOfferId())));
+            card.add(text(formatNumber(action.getQuantity()) + " at " + formatNumber(action.getPricePerItem()) + " GP each" + slotLabel(action.getReplacesOfferId())));
+            PortfolioModels.InventoryGuidance guidance = guidanceByItem.get(action.getItemId());
+            if (isSellAction(action, side) && guidance != null) {
+                addGuidanceContext(card, guidance);
+            }
             if (actionable && isOfferSuggestion(action, side)) {
                 JButton choose = new JButton("Use this suggestion");
                 choose.addActionListener(event -> {
@@ -273,6 +281,11 @@ public class FlippingTablesPanel extends PluginPanel {
                 card.add(copyPrice);
             }
             results.add(card);
+        }
+        for (PortfolioModels.InventoryGuidance guidance : advice.getInventoryGuidance()) {
+            if (!hasSellAction(advice.getActions(), guidance.getItemId())) {
+                results.add(guidanceCard(guidance, names));
+            }
         }
         for (String limitation : advice.getLimitations()) {
             results.add(text(limitation));
@@ -512,6 +525,91 @@ public class FlippingTablesPanel extends PluginPanel {
             return " (GE slot " + (Integer.parseInt(offerId.substring(5)) + 1) + ")";
         }
         return " (existing offer)";
+    }
+
+    private static Map<Long, PortfolioModels.InventoryGuidance> guidanceByItem(List<PortfolioModels.InventoryGuidance> guidance) {
+        Map<Long, PortfolioModels.InventoryGuidance> byItem = new HashMap<>();
+        for (PortfolioModels.InventoryGuidance item : guidance) {
+            byItem.put(item.getItemId(), item);
+        }
+        return byItem;
+    }
+
+    private boolean hasSellAction(List<PortfolioModels.Action> actions, long itemId) {
+        for (PortfolioModels.Action action : actions) {
+            if (action.getItemId() == itemId && isSellAction(action, repository.sideOf(action))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isSellAction(PortfolioModels.Action action, String side) {
+        return "CREATE_SELL".equals(action.getType()) || (("KEEP".equals(action.getType()) || "REPRICE".equals(action.getType()))
+                && "SELL".equals(side));
+    }
+
+    private static JPanel guidanceCard(PortfolioModels.InventoryGuidance guidance, Map<Long, String> names) {
+        JPanel card = column();
+        card.setBorder(new EmptyBorder(10, 0, 10, 0));
+        card.add(text(guidance.getStatus().replace('_', ' ') + " - "
+                + names.getOrDefault(guidance.getItemId(), "Item " + guidance.getItemId())));
+        card.add(text(guidance.getMessage()));
+        card.add(text(formatNumber(guidance.getQuantity()) + " held; " + formatNumber(guidance.getListedQuantity()) + " stays listed."));
+        addGuidanceContext(card, guidance);
+        return card;
+    }
+
+    private static void addGuidanceContext(JPanel card, PortfolioModels.InventoryGuidance guidance) {
+        PortfolioModels.SaleQuote quote = guidance.getQuote();
+        if (quote == null) {
+            return;
+        }
+        card.add(text("Price evidence: " + evidenceWindow(quote.getEvidenceWindow()) + " at " + formatNumber(quote.getPricePerItem())
+                + " GP each; latest " + quoteAge(quote.getLatestObservationAt()) + "; volume " + formatNumber(quote.getObservedVolume())
+                + " observed, " + formatNumber(quote.getProjectedVolume()) + " projected."));
+        if (quote.isUsedFallback()) {
+            card.add(text("Four-hour evidence fallback: projected volume is scaled to the selling window; it does not promise a fill or profit."));
+        }
+        if (quote.getProjectedVolume() < guidance.getQuantity()) {
+            card.add(text("Observed market volume does not support the full quantity within the selling window."));
+        }
+        if (quote.getProjectedVolume() == 0) {
+            card.add(text("Projected market volume is less than one trade in this selling window; it does not mean no sale can fill."));
+        }
+    }
+
+    private static String quoteAge(String latestObservationAt) {
+        try {
+            Duration age = Duration.between(Instant.parse(latestObservationAt), Instant.now());
+            if (!age.isNegative()) {
+                return age.toMinutes() + " minutes old";
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return latestObservationAt;
+    }
+
+    private static String evidenceWindow(String value) {
+        Duration duration = Duration.parse(value);
+        long hours = duration.toHours();
+        long minutes = duration.minusHours(hours).toMinutes();
+        long seconds = duration.minusHours(hours).minusMinutes(minutes).getSeconds();
+        String result = "";
+        if (hours > 0) {
+            result = hours + (hours == 1 ? " hour" : " hours");
+        }
+        if (minutes > 0) {
+            result += (result.isEmpty() ? "" : " ") + minutes + (minutes == 1 ? " minute" : " minutes");
+        }
+        if (seconds > 0) {
+            result += (result.isEmpty() ? "" : " ") + seconds + (seconds == 1 ? " second" : " seconds");
+        }
+        return result;
+    }
+
+    private static String formatNumber(long value) {
+        return String.format(Locale.UK, "%,d", value);
     }
 
     private static boolean isOfferSuggestion(PortfolioModels.Action action, String side) {

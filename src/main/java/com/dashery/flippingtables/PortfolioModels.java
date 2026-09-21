@@ -168,6 +168,7 @@ public final class PortfolioModels
 	public static final class Advice
 	{
 		private final List<Action> actions;
+		private final List<InventoryGuidance> inventoryGuidance;
 		private final long projectedCashCommitted;
 		private final long realisedProfit;
 		private final long inventoryCost;
@@ -177,7 +178,15 @@ public final class PortfolioModels
 
 		public Advice(List<Action> actions, long projectedCashCommitted, long realisedProfit, long inventoryCost, long conservativeInventoryValue, List<String> limitations, String searchStatus)
 		{
+			this(actions, Collections.<InventoryGuidance>emptyList(), projectedCashCommitted, realisedProfit, inventoryCost,
+				conservativeInventoryValue, limitations, searchStatus);
+		}
+
+		public Advice(List<Action> actions, List<InventoryGuidance> inventoryGuidance, long projectedCashCommitted,
+				long realisedProfit, long inventoryCost, long conservativeInventoryValue, List<String> limitations, String searchStatus)
+		{
 			this.actions = immutableList(actions);
+			this.inventoryGuidance = immutableList(inventoryGuidance);
 			this.projectedCashCommitted = projectedCashCommitted;
 			this.realisedProfit = realisedProfit;
 			this.inventoryCost = inventoryCost;
@@ -187,6 +196,7 @@ public final class PortfolioModels
 		}
 
 		public List<Action> getActions() { return actions; }
+		public List<InventoryGuidance> getInventoryGuidance() { return inventoryGuidance == null ? Collections.<InventoryGuidance>emptyList() : inventoryGuidance; }
 		public long getProjectedCashCommitted() { return projectedCashCommitted; }
 		public long getRealisedProfit() { return realisedProfit; }
 		public long getInventoryCost() { return inventoryCost; }
@@ -225,5 +235,60 @@ public final class PortfolioModels
 		public long getPricePerItem() { return pricePerItem; }
 		public String getReplacesOfferId() { return replacesOfferId; }
 		public String getRecommendationId() { return recommendationId; }
+	}
+
+	public static final class InventoryGuidance
+	{
+		private final long itemId;
+		private final long quantity;
+		private final long listedQuantity;
+		private final String status;
+		private final String message;
+		private final SaleQuote quote;
+
+		public InventoryGuidance(long itemId, long quantity, long listedQuantity, String status, String message, SaleQuote quote)
+		{
+			this.itemId = itemId;
+			this.quantity = quantity;
+			this.listedQuantity = listedQuantity;
+			this.status = status;
+			this.message = message;
+			this.quote = quote;
+		}
+
+		public long getItemId() { return itemId; }
+		public long getQuantity() { return quantity; }
+		public long getListedQuantity() { return listedQuantity; }
+		public String getStatus() { return status; }
+		public String getMessage() { return message; }
+		public SaleQuote getQuote() { return quote; }
+	}
+
+	public static final class SaleQuote
+	{
+		private final long pricePerItem;
+		private final String evidenceWindow;
+		private final String latestObservationAt;
+		private final boolean usedFallback;
+		private final long observedVolume;
+		private final long projectedVolume;
+
+		public SaleQuote(long pricePerItem, String evidenceWindow, String latestObservationAt, boolean usedFallback,
+				long observedVolume, long projectedVolume)
+		{
+			this.pricePerItem = pricePerItem;
+			this.evidenceWindow = evidenceWindow;
+			this.latestObservationAt = latestObservationAt;
+			this.usedFallback = usedFallback;
+			this.observedVolume = observedVolume;
+			this.projectedVolume = projectedVolume;
+		}
+
+		public long getPricePerItem() { return pricePerItem; }
+		public String getEvidenceWindow() { return evidenceWindow; }
+		public String getLatestObservationAt() { return latestObservationAt; }
+		public boolean isUsedFallback() { return usedFallback; }
+		public long getObservedVolume() { return observedVolume; }
+		public long getProjectedVolume() { return projectedVolume; }
 	}
 }

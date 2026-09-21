@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -33,12 +34,14 @@ public class FlippingTablesClient
 	private static final long MAX_GAME_VALUE = Integer.MAX_VALUE;
 	private static final int MAX_RESPONSE_BYTES = 256 * 1024;
 	private static final int MAX_ACTIONS = 32;
+	private static final int MAX_INVENTORY_GUIDANCE = 128;
 	private static final int MAX_LIMITATIONS = 20;
 	private static final int MAX_TEXT = 1000;
 	private static final int MAX_OFFER_ID = 64;
 	private static final int MAX_SEARCH_STATUS = 32;
 	private static final int MAX_TIMESTAMP = 64;
 	private static final Set<String> ACTION_TYPES = new HashSet<>(Arrays.asList("KEEP", "CANCEL", "REPRICE", "CREATE_BUY", "CREATE_SELL"));
+	private static final Set<String> INVENTORY_GUIDANCE_STATUSES = new HashSet<>(Arrays.asList("SELL", "KEEP", "NO_QUOTE", "NO_SLOT"));
 
 	private final OkHttpClient client;
 	private final OkHttpClient recordingClient;
@@ -219,6 +222,7 @@ public class FlippingTablesClient
 			requireLong(advice, "realisedProfit", Long.MIN_VALUE, Long.MAX_VALUE);
 			validateActions(advice.getAsJsonArray("actions"));
 			validateLimitations(advice.getAsJsonArray("limitations"));
+			validateInventoryGuidance(advice);
 
 			PortfolioModels.AdviceResponse response = gson.fromJson(root, PortfolioModels.AdviceResponse.class);
 			if (response == null || response.getAdvice() == null || response.getAdvice().getActions() == null || response.getAdvice().getLimitations() == null)
@@ -234,6 +238,52 @@ public class FlippingTablesClient
 		catch (RuntimeException error)
 		{
 			throw new IOException("Advice response was malformed", error);
+		}
+	}
+
+	private void validateInventoryGuidance(JsonObject advice) throws IOException
+	{
+		if (!advice.has("inventoryGuidance"))
+		{
+			return;
+		}
+		requireArray(advice, "inventoryGuidance", MAX_INVENTORY_GUIDANCE);
+		Set<Long> guidedItems = new HashSet<>();
+		for (JsonElement element : advice.getAsJsonArray("inventoryGuidance"))
+		{
+			if (!element.isJsonObject())
+			{
+				throw new IOException("Advice response contains malformed inventory guidance");
+			}
+			JsonObject guidance = element.getAsJsonObject();
+			long itemId = requireLong(guidance, "itemId", 1, MAX_GAME_VALUE);
+			long quantity = requireLong(guidance, "quantity", 1, MAX_GAME_VALUE);
+			long listedQuantity = requireLong(guidance, "listedQuantity", 0, MAX_GAME_VALUE);
+			if (!guidedItems.add(itemId) || listedQuantity > quantity)
+			{
+				throw new IOException("Advice response contains invalid inventory guidance quantities");
+			}
+			String status = requireString(guidance, "status", false, MAX_SEARCH_STATUS);
+			if (!INVENTORY_GUIDANCE_STATUSES.contains(status))
+			{
+				throw new IOException("Advice response contains an invalid inventory guidance status");
+			}
+			requireString(guidance, "message", false, MAX_TEXT);
+			if (!guidance.has("quote") || guidance.get("quote").isJsonNull())
+			{
+				continue;
+			}
+			if (!guidance.get("quote").isJsonObject())
+			{
+				throw new IOException("Advice response contains an invalid inventory quote");
+			}
+			JsonObject quote = guidance.getAsJsonObject("quote");
+			requireLong(quote, "pricePerItem", 1, MAX_GAME_VALUE);
+			requireDuration(quote, "evidenceWindow");
+			requireTimestamp(quote, "latestObservationAt");
+			requireBoolean(quote, "usedFallback");
+			requireLong(quote, "observedVolume", 0, Long.MAX_VALUE);
+			requireLong(quote, "projectedVolume", 0, Long.MAX_VALUE);
 		}
 	}
 
@@ -352,6 +402,44 @@ public class FlippingTablesClient
 		catch (DateTimeParseException error)
 		{
 			throw new IOException("Advice response has an invalid " + field, error);
+		}
+	}
+
+	private void requireTimestamp(JsonObject object, String field) throws IOException
+	{
+		String value = requireString(object, field, false, MAX_TIMESTAMP);
+		try
+		{
+			Instant.parse(value);
+		}
+		catch (DateTimeParseException error)
+		{
+			throw new IOException("Advice response has an invalid " + field, error);
+		}
+	}
+
+	private void requireDuration(JsonObject object, String field) throws IOException
+	{
+		String value = requireString(object, field, false, MAX_TIMESTAMP);
+		try
+		{
+			Duration duration = Duration.parse(value);
+			if (duration.isNegative() || duration.isZero())
+			{
+				throw new IOException("Advice response has an invalid " + field);
+			}
+		}
+		catch (java.time.format.DateTimeParseException error)
+		{
+			throw new IOException("Advice response has an invalid " + field, error);
+		}
+	}
+
+	private void requireBoolean(JsonObject object, String field) throws IOException
+	{
+		if (!object.has(field) || !object.get(field).isJsonPrimitive() || !object.getAsJsonPrimitive(field).isBoolean())
+		{
+			throw new IOException("Advice response has an invalid " + field);
 		}
 	}
 

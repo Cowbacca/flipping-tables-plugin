@@ -47,6 +47,55 @@ public class FlippingTablesClientTest
 	}
 
 	@Test
+	public void acceptsResponsesFromBeforeInventoryGuidanceWasAdded() throws Exception
+	{
+		HttpServer server = server(new FixedResponseHandler(200, validResponse(null), new AtomicReference<>(), new AtomicReference<>()));
+		try
+		{
+			assertTrue(client(server, "/api").requestPortfolioAdvice(request(), "token").getAdvice().getInventoryGuidance().isEmpty());
+		}
+		finally
+		{
+			server.stop(0);
+		}
+	}
+
+	@Test
+	public void acceptsSafeInventoryGuidanceMetadata() throws Exception
+	{
+		HttpServer server = server(new FixedResponseHandler(200, responseWithInventoryGuidance(inventoryGuidance(1120000)), new AtomicReference<>(), new AtomicReference<>()));
+		try
+		{
+			PortfolioModels.InventoryGuidance guidance = client(server, "/api").requestPortfolioAdvice(request(), "token")
+				.getAdvice().getInventoryGuidance().get(0);
+			assertEquals("SELL", guidance.getStatus());
+			assertEquals(1120000L, guidance.getQuote().getPricePerItem());
+			assertEquals(2L, guidance.getQuote().getProjectedVolume());
+		}
+		finally
+		{
+			server.stop(0);
+		}
+	}
+
+	@Test
+	public void acceptsLargeAggregatedQuoteVolumes() throws Exception
+	{
+		String guidance = inventoryGuidance(1120000).replace("\"observedVolume\":8", "\"observedVolume\":9223372036854775807")
+			.replace("\"projectedVolume\":2", "\"projectedVolume\":9223372036854775807");
+		HttpServer server = server(new FixedResponseHandler(200, responseWithInventoryGuidance(guidance), new AtomicReference<>(), new AtomicReference<>()));
+		try
+		{
+			assertEquals(Long.MAX_VALUE, client(server, "/api").requestPortfolioAdvice(request(), "token")
+				.getAdvice().getInventoryGuidance().get(0).getQuote().getObservedVolume());
+		}
+		finally
+		{
+			server.stop(0);
+		}
+	}
+
+	@Test
 	public void surfacesAuthorizationRateLimitAndServerErrors() throws Exception
 	{
 		assertFailure(401, "not authorized");
@@ -116,6 +165,7 @@ public class FlippingTablesClientTest
 		assertInvalidResponse(validResponse(null).replace("\"marketDataThrough\":null", "\"marketDataThrough\":\"not-a-timestamp\""));
 		assertInvalidResponse(validResponse(null).replace("\"actions\":[]", "\"actions\":" + actions(33)));
 		assertInvalidResponse(validResponse(null).replace("\"limitations\":[]", "\"limitations\":" + limitations(21)));
+		assertInvalidResponse(responseWithInventoryGuidance(inventoryGuidance(0)));
 	}
 
 	@Test
@@ -269,6 +319,17 @@ public class FlippingTablesClientTest
 			+ ",\"projectedCashCommitted\":0,\"realisedProfit\":0,\"inventoryCost\":0"
 			+ ",\"conservativeInventoryValue\":0,\"limitations\":[],\"searchStatus\":\"EXACT\"}"
 			+ ",\"marketDataThrough\":null}";
+	}
+
+	private String responseWithInventoryGuidance(String guidance)
+	{
+		return validResponse(null).replace("\"limitations\":[]", "\"inventoryGuidance\":[" + guidance + "],\"limitations\":[]");
+	}
+
+	private String inventoryGuidance(long pricePerItem)
+	{
+		return "{\"itemId\":31581,\"quantity\":3,\"listedQuantity\":3,\"status\":\"SELL\",\"message\":\"Sell 3.\",\"quote\":{\"pricePerItem\":"
+			+ pricePerItem + ",\"evidenceWindow\":\"PT4H\",\"latestObservationAt\":\"2026-09-21T15:00:00Z\",\"usedFallback\":true,\"observedVolume\":8,\"projectedVolume\":2}}";
 	}
 
 	private String repeated(char value, int count)

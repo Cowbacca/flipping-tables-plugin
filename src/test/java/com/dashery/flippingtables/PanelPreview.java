@@ -43,6 +43,20 @@ public final class PanelPreview {
                         Collections.emptyMap(), 1000, java.time.Duration.ofHours(4), 10).getSnapshot());
                 panel.showAdvice(response, java.util.Map.of(1515L, "Yew logs", 4151L, "Abyssal whip"));
                 render(panel, output.resolve("advice.png"));
+                PortfolioModels.AdviceResponse guidanceResponse = new PortfolioModels.AdviceResponse(2,
+                        new PortfolioModels.Advice(Collections.singletonList(
+                                new PortfolioModels.Action("CREATE_SELL", 12881, 4, 3556029, null)), Arrays.asList(
+                                new PortfolioModels.InventoryGuidance(12881, 4, 0, "SELL",
+                                        "Sell 4 using the requested selling-window evidence.",
+                                        new PortfolioModels.SaleQuote(3556029, "PT1H", "2026-09-21T15:00:00Z", false, 1, 1)),
+                                new PortfolioModels.InventoryGuidance(4151, 5, 2, "NO_QUOTE",
+                                        "No usable high-side price evidence is available; the existing offer stays listed.", null),
+                                new PortfolioModels.InventoryGuidance(31581, 3, 0, "NO_SLOT",
+                                        "A quote is available, but no Grand Exchange slot is free.",
+                                        new PortfolioModels.SaleQuote(1120254, "PT4H", "2026-09-21T15:00:00Z", true, 3, 0))),
+                                0, 0, 0, 200, Collections.emptyList(), "EXACT"), "2026-09-19T20:00:00Z");
+                panel.showAdvice(guidanceResponse, java.util.Map.of(31581L, "Toxic blowpipe", 12881L, "Ahrim's robetop", 4151L, "Abyssal whip"));
+                render(panel, output.resolve("sale-guidance.png"));
                 panel.displayPortfolio(captured);
                 panel.showAdviceStatus("Portfolio updated. Review the retained advice and request a fresh plan when ready.");
                 render(panel, output.resolve("needs-review.png"));

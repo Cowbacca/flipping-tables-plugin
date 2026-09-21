@@ -182,6 +182,79 @@ public class FlippingTablesPanelTest {
         });
     }
 
+    @Test
+    public void showsEvidenceOnSellActionWithoutAddingAnotherGuidanceCard() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            PortfolioModels.Action reprice = new PortfolioModels.Action("REPRICE", 4151, 3, 1120000, "slot-0");
+            PortfolioModels.InventoryGuidance guidance = new PortfolioModels.InventoryGuidance(4151, 3, 3, "SELL",
+                    "Sell 3 using four hours of price evidence.", new PortfolioModels.SaleQuote(1120000,
+                    "PT4H", "2026-09-21T15:00:00Z", true, 8, 2));
+            PortfolioModels.AdviceResponse response = response(java.util.Collections.singletonList(reprice),
+                    java.util.Collections.singletonList(guidance));
+            PortfolioAdviceRepository repository = new PortfolioAdviceRepository();
+            repository.save(response, new PortfolioModels.Snapshot(0, java.util.Collections.emptyList(),
+                    java.util.Collections.singletonList(new PortfolioModels.OpenOffer("slot-0", 4151, "SELL", 100, 3, 0)),
+                    8, java.util.Collections.emptyMap(), "2026-09-20T07:00:00Z"));
+            FlippingTablesPanel panel = new FlippingTablesPanel(mock(FlippingTablesPlugin.class), new FlippingTablesConfig() {}, repository);
+            panel.showAdvice(response, java.util.Collections.singletonMap(4151L, "Abyssal whip"));
+
+            java.util.List<String> values = textValues(fieldUnchecked(panel, "results", javax.swing.JPanel.class));
+            assertTrue(values.stream().anyMatch(value -> value.contains("Price evidence: 4 hours at 1,120,000 GP each")));
+            assertEquals(1, values.stream().filter(value -> value.contains("Abyssal whip")).count());
+            panel.shutdown();
+        });
+    }
+
+    @Test
+    public void explainsUnpricedHeldStockWithoutSuggestionControls() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            PortfolioModels.InventoryGuidance guidance = new PortfolioModels.InventoryGuidance(31581, 3, 0, "NO_QUOTE",
+                    "No usable high-side price evidence is available.", null);
+            PortfolioModels.Action buy = new PortfolioModels.Action("CREATE_BUY", 31581, 1, 100, null);
+            PortfolioModels.AdviceResponse response = response(java.util.Collections.singletonList(buy),
+                    java.util.Collections.singletonList(guidance));
+            PortfolioAdviceRepository repository = new PortfolioAdviceRepository();
+            repository.save(response, null);
+            FlippingTablesPanel panel = new FlippingTablesPanel(mock(FlippingTablesPlugin.class), new FlippingTablesConfig() {}, repository);
+            panel.showAdvice(response, java.util.Collections.singletonMap(31581L, "Dragon item"));
+
+            java.util.List<String> values = textValues(fieldUnchecked(panel, "results", javax.swing.JPanel.class));
+            assertTrue(values.contains("NO QUOTE - Dragon item"));
+            assertTrue(values.contains("No usable high-side price evidence is available."));
+            assertEquals(1, java.util.Collections.frequency(buttonLabels(panel), "Use this suggestion"));
+            assertEquals(1, java.util.Collections.frequency(buttonLabels(panel), "Copy price"));
+            panel.shutdown();
+        });
+    }
+
+    @Test
+    public void keepsGuidanceSeparateFromSellCancellation() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            PortfolioModels.Action cancel = new PortfolioModels.Action("CANCEL", 4151, 3, 100, "slot-0");
+            PortfolioModels.InventoryGuidance guidance = new PortfolioModels.InventoryGuidance(4151, 3, 3, "NO_QUOTE",
+                    "No fresh quote is available, so the existing sale stays listed.", null);
+            PortfolioModels.AdviceResponse response = response(java.util.Collections.singletonList(cancel),
+                    java.util.Collections.singletonList(guidance));
+            PortfolioAdviceRepository repository = new PortfolioAdviceRepository();
+            repository.save(response, new PortfolioModels.Snapshot(0, java.util.Collections.emptyList(),
+                    java.util.Collections.singletonList(new PortfolioModels.OpenOffer("slot-0", 4151, "SELL", 100, 3, 0)),
+                    8, java.util.Collections.emptyMap(), "2026-09-20T07:00:00Z"));
+            FlippingTablesPanel panel = new FlippingTablesPanel(mock(FlippingTablesPlugin.class), new FlippingTablesConfig() {}, repository);
+            panel.showAdvice(response, java.util.Collections.singletonMap(4151L, "Abyssal whip"));
+
+            java.util.List<String> values = textValues(fieldUnchecked(panel, "results", javax.swing.JPanel.class));
+            assertTrue(values.contains("NO QUOTE - Abyssal whip"));
+            assertTrue(values.contains("No fresh quote is available, so the existing sale stays listed."));
+            panel.shutdown();
+        });
+    }
+
+    private static PortfolioModels.AdviceResponse response(java.util.List<PortfolioModels.Action> actions,
+            java.util.List<PortfolioModels.InventoryGuidance> guidance) {
+        return new PortfolioModels.AdviceResponse(1, new PortfolioModels.Advice(actions, guidance, 0, 0, 0, 0,
+                java.util.Collections.emptyList(), "EXACT"), "2026-09-20T07:00:00Z");
+    }
+
     private static java.util.List<String> buttonLabels(java.awt.Container container) {
         java.util.List<String> labels = new java.util.ArrayList<>();
         for (java.awt.Component component : container.getComponents()) {
