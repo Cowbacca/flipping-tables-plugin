@@ -45,27 +45,16 @@ public interface FlippingTablesConfig extends Config
 	@ConfigItem(
 			position = 2,
 			keyName = "nextVisitHours",
-			name = "Hours until next visit",
-			description = "Default time until your next Grand Exchange visit, from 1 to 168 hours"
+			name = "Hours until next return",
+			description = "Default time until you return to the Grand Exchange, used to cap buy limits that refresh before then, from 1 to 168 hours"
 	)
-	default int nextVisitHours()
+	default int nextReturnHours()
 	{
 		return 4;
 	}
 
 	@ConfigItem(
 			position = 3,
-			keyName = "followingVisitHours",
-			name = "Hours until following visit",
-			description = "Default interval between the next visit and the following visit; defaults to the next-visit value"
-	)
-	default int followingVisitHours()
-	{
-		return nextVisitHours();
-	}
-
-	@ConfigItem(
-			position = 4,
 			keyName = "recordOffers",
 			name = "Record GE offers",
 			description = "Record Grand Exchange offer counters and sync them to the configured Flipping Tables API"
@@ -76,7 +65,7 @@ public interface FlippingTablesConfig extends Config
 	}
 
 	@ConfigItem(
-			position = 5,
+			position = 4,
 			keyName = "volumeParticipationPercent",
 			name = "Volume participation (%)",
 			description = "Conservative share of observed trade volume used for estimates, from 1 to 100"

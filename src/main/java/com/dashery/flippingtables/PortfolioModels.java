@@ -117,31 +117,28 @@ public final class PortfolioModels
 	public static final class AdviceRequest
 	{
 		private final Snapshot snapshot;
-		private final String nextVisitInterval;
-		private final String followingVisitInterval;
+		private final String nextReturnInterval;
 		private final long volumeParticipationPercent;
 		private final boolean members;
 		private final String accountId;
 
-		public AdviceRequest(Snapshot snapshot, String nextVisitInterval, long volumeParticipationPercent, boolean members)
+		public AdviceRequest(Snapshot snapshot, String nextReturnInterval, long volumeParticipationPercent, boolean members)
 		{
-			this(snapshot, nextVisitInterval, nextVisitInterval, volumeParticipationPercent, members, null);
+			this(snapshot, nextReturnInterval, volumeParticipationPercent, members, null);
 		}
 
-		public AdviceRequest(Snapshot snapshot, String nextVisitInterval, String followingVisitInterval,
+		public AdviceRequest(Snapshot snapshot, String nextReturnInterval,
 				long volumeParticipationPercent, boolean members, String accountId)
 		{
 			this.snapshot = snapshot;
-			this.nextVisitInterval = nextVisitInterval;
-			this.followingVisitInterval = followingVisitInterval;
+			this.nextReturnInterval = nextReturnInterval;
 			this.volumeParticipationPercent = volumeParticipationPercent;
 			this.members = members;
 			this.accountId = accountId;
 		}
 
 		public Snapshot getSnapshot() { return snapshot; }
-		public String getNextVisitInterval() { return nextVisitInterval; }
-		public String getFollowingVisitInterval() { return followingVisitInterval; }
+		public String getNextReturnInterval() { return nextReturnInterval; }
 		public long getVolumeParticipationPercent() { return volumeParticipationPercent; }
 		public boolean isMembers() { return members; }
 		public String getAccountId() { return accountId; }

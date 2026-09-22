@@ -36,7 +36,9 @@ public class FlippingTablesClientTest
 
 			assertEquals(7L, response.getSnapshotId());
 			assertEquals("Bearer token-value", authorization.get());
-			assertTrue(body.get().contains("\"nextVisitInterval\":\"PT5M\""));
+			assertTrue(body.get().contains("\"nextReturnInterval\":\"PT5M\""));
+			assertFalse(body.get().contains("nextVisitInterval"));
+			assertFalse(body.get().contains("followingVisitInterval"));
 			assertTrue(body.get().contains("\"capturedAt\":\"2026-01-01T00:00:00Z\""));
 			assertNull(response.getMarketDataThrough());
 		}

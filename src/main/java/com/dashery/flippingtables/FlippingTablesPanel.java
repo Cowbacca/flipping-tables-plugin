@@ -53,7 +53,6 @@ public class FlippingTablesPanel extends PluginPanel {
     private final PortfolioAdviceRepository repository;
     private final JPasswordField token = new JPasswordField();
     private final JTextField hours = new JTextField();
-    private final JTextField followingHours = new JTextField();
     private final JTextField cash = new JTextField("0");
     private final JCheckBox consent = new JCheckBox("Send portfolio for advice");
     private final JCheckBox recordOffers = new JCheckBox("Record Grand Exchange offers");
@@ -84,10 +83,9 @@ public class FlippingTablesPanel extends PluginPanel {
         add(text("Flipping Tables"));
         add(disclosure);
         add(field("API token (kept in memory)", token));
-        hours.setText(Integer.toString(config.nextVisitHours()));
-        add(field("Hours until next visit", hours));
-        followingHours.setText(Integer.toString(config.followingVisitHours()));
-        add(field("Hours after next visit", followingHours));
+        hours.setText(Integer.toString(config.nextReturnHours()));
+        add(field("Hours until next return", hours));
+        add(text("Advice always evaluates eight-hour buying and selling windows. Your return time only allows buy-limit resets before you return."));
         add(field("Cash budget (carried GP)", cash));
         add(consent);
         add(recordOffers);
@@ -123,7 +121,6 @@ public class FlippingTablesPanel extends PluginPanel {
         consent.addActionListener(event -> inputChanged());
         recordOffers.addActionListener(event -> recordingChanged());
         watch(hours);
-        watch(followingHours);
         watch(cash);
         watch(token);
         recordingChanged();
@@ -141,7 +138,7 @@ public class FlippingTablesPanel extends PluginPanel {
         addInventoryStock(value);
         stocks.add(text("Uncollected items and bank stock are excluded. Cost is optional; 0 means unknown."));
         stocks.add(text("Buy limits include fills observed this session. Earlier or offline purchases may leave less allowance. Check limits in game."));
-        status.setText("Portfolio ready. Review stock, budget and next visit before requesting advice.");
+        status.setText("Portfolio ready. Review stock, budget and your next return before requesting advice.");
         setBusy(false);
         updating = false;
         refresh();
@@ -412,7 +409,7 @@ public class FlippingTablesPanel extends PluginPanel {
                 }
             }
             plugin.requestAdvice(captured, selected, costs, VisitInputs.wholeNumber(cash.getText(), "Cash budget"),
-                    VisitInputs.visitInterval(hours.getText()), VisitInputs.visitInterval(followingHours.getText()), apiToken);
+                    VisitInputs.visitInterval(hours.getText()), apiToken);
         } catch (RuntimeException error) {
             showError(error.getMessage());
         }

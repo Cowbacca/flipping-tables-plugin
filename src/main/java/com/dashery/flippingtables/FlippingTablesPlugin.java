@@ -189,7 +189,7 @@ public class FlippingTablesPlugin extends Plugin {
     }
 
     public void requestAdvice(CapturedPortfolio displayed, Set<Long> selected, Map<Long, Long> costs,
-            long cashBudget, Duration nextVisitInterval, Duration followingVisitInterval, String token) {
+            long cashBudget, Duration nextReturnInterval, String token) {
         long requestGeneration = invalidateRequest();
         panel.setBusy(true);
         clientThread.invokeLater(() -> {
@@ -202,7 +202,7 @@ public class FlippingTablesPlugin extends Plugin {
                     throw new IllegalStateException("Wait for offer recording to identify this account before requesting advice.");
                 }
                 PortfolioModels.AdviceRequest request = PortfolioRequestBuilder.create(
-                        captured, selected, costs, cashBudget, nextVisitInterval, followingVisitInterval,
+                        captured, selected, costs, cashBudget, nextReturnInterval,
                         config.volumeParticipationPercent(), offerResultsRecorder.accountId());
                 lastCapture = captured;
                 worker.submit(() -> {

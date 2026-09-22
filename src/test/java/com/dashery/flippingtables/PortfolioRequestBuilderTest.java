@@ -11,7 +11,7 @@ public class PortfolioRequestBuilderTest {
     public void includesRemainingListedStockAndOnlySelectedCarriedItems() {
         PortfolioModels.AdviceRequest request = PortfolioRequestBuilder.create(portfolio(), Collections.singleton(4151L),
                 Collections.singletonMap(4151L, 100L), 500, Duration.ofMinutes(150), 10);
-        assertEquals("PT2H30M", request.getNextVisitInterval());
+        assertEquals("PT2H30M", request.getNextReturnInterval());
         assertEquals(8, request.getSnapshot().getSlots());
         assertEquals(500, request.getSnapshot().getCashAvailable());
         assertEquals(1, request.getSnapshot().getInventory().size());

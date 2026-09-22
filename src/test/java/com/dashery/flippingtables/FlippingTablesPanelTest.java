@@ -100,7 +100,7 @@ public class FlippingTablesPanelTest {
 
             ArgumentCaptor<Set<Long>> selected = ArgumentCaptor.forClass(Set.class);
             verify(plugin, times(2)).requestAdvice(org.mockito.ArgumentMatchers.eq(captured), selected.capture(), anyMap(), anyLong(),
-                    any(), any(), anyString());
+                    any(), anyString());
             assertEquals(Set.of(4151L, 1515L), selected.getAllValues().get(0));
             assertTrue(selected.getAllValues().get(1).isEmpty());
             PortfolioModels.AdviceRequest request = PortfolioRequestBuilder.create(captured, selected.getAllValues().get(1),
@@ -129,7 +129,7 @@ public class FlippingTablesPanelTest {
 
             ArgumentCaptor<Set<Long>> selected = ArgumentCaptor.forClass(Set.class);
             verify(plugin).requestAdvice(org.mockito.ArgumentMatchers.eq(captured), selected.capture(), anyMap(), anyLong(),
-                    any(), any(), anyString());
+                    any(), anyString());
             assertTrue(selected.getValue().isEmpty());
             panel.shutdown();
         });
@@ -361,13 +361,11 @@ public class FlippingTablesPanelTest {
                 ArgumentCaptor<Set<Long>> selected = ArgumentCaptor.forClass(Set.class);
                 ArgumentCaptor<Map<Long, Long>> costs = ArgumentCaptor.forClass(Map.class);
                 ArgumentCaptor<Duration> intervals = ArgumentCaptor.forClass(Duration.class);
-                ArgumentCaptor<Duration> followingIntervals = ArgumentCaptor.forClass(Duration.class);
                 verify(plugin, times(2)).requestAdvice(org.mockito.ArgumentMatchers.eq(captured), selected.capture(),
-                        costs.capture(), anyLong(), intervals.capture(), followingIntervals.capture(), anyString());
+                        costs.capture(), anyLong(), intervals.capture(), anyString());
                 assertTrue(selected.getAllValues().get(1).contains(4151L));
                 assertEquals(Long.valueOf(100L), costs.getAllValues().get(1).get(4151L));
                 assertEquals(Duration.ofHours(8), intervals.getAllValues().get(1));
-                assertEquals(Duration.ofHours(4), followingIntervals.getAllValues().get(1));
 
                 panel.showError("Portfolio advice request failed (HTTP 400).");
                 assertEquals("Portfolio advice request failed (HTTP 400).", status.getText());
