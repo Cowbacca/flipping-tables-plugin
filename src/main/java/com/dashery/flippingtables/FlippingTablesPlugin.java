@@ -149,6 +149,10 @@ public class FlippingTablesPlugin extends Plugin {
     }
 
     public void readPortfolio() {
+        readPortfolio(null);
+    }
+
+    public void readPortfolio(Runnable afterRead) {
         long requestGeneration = invalidateRequest();
         panel.setBusy(true);
         clientThread.invokeLater(() -> {
@@ -180,6 +184,9 @@ public class FlippingTablesPlugin extends Plugin {
                         } else if (repository.hasAdvice() && repository.isStale()) {
                             panel.showAdviceStatus("Portfolio updated. Review the retained advice and request a fresh plan when ready.");
                         }
+                        if (afterRead != null) {
+                            afterRead.run();
+                        }
                     });
                 }
             } catch (RuntimeException error) {
@@ -196,7 +203,7 @@ public class FlippingTablesPlugin extends Plugin {
             try {
                 CapturedPortfolio captured = captureService.capture();
                 if (!captured.getFingerprint().equals(displayed.getFingerprint())) {
-                    throw new IllegalStateException("Your portfolio changed. Read it again before requesting advice.");
+                    throw new IllegalStateException("Your portfolio changed. Press Plan next visit again for fresh advice.");
                 }
                 if (offerResultsRecorder.isRecordingEnabled() && offerResultsRecorder.accountId() == null) {
                     throw new IllegalStateException("Wait for offer recording to identify this account before requesting advice.");
@@ -240,7 +247,7 @@ public class FlippingTablesPlugin extends Plugin {
         }
         try {
             if (!captureService.capture().getFingerprint().equals(captured.getFingerprint())) {
-                markAdviceStale("Your portfolio changed while advice was loading. Review the retained advice and read it again before requesting a fresh plan.");
+                markAdviceStale("Your portfolio changed while advice was loading. Review the retained advice and press Plan next visit again for a fresh plan.");
                 return;
             }
             Map<Long, String> names = new HashMap<>();
@@ -255,7 +262,7 @@ public class FlippingTablesPlugin extends Plugin {
             planProgress = PortfolioPlanProgress.start(captured, response.getAdvice().getActions());
             onPanel(requestGeneration, () -> panel.showAdvice(response, names));
         } catch (RuntimeException error) {
-            markAdviceStale("Unable to verify this portfolio. Review the retained advice and read it again before requesting a fresh plan.");
+            markAdviceStale("Unable to verify this portfolio. Review the retained advice and press Plan next visit again for a fresh plan.");
         }
     }
 
@@ -288,7 +295,7 @@ public class FlippingTablesPlugin extends Plugin {
             geLimitsTracker.resetSession();
         }
         if (event.getGameState() != GameState.LOGGED_IN) {
-            invalidate("Read your portfolio after logging in or returning to the game.", true);
+            invalidate("Press Plan next visit after logging in or returning to the game.", true);
             geSearchButton.reset();
             if (offerResultsRecorder != null) {
                 offerResultsRecorder.deactivate();

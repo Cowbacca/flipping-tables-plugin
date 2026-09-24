@@ -63,6 +63,22 @@ public class FlippingTablesClientTest
 	}
 
 	@Test
+	public void readsExpectedProfitWhenProvided() throws Exception
+	{
+		String response = validResponse(null).replace("\"realisedProfit\":0", "\"realisedProfit\":0,\"expectedProfit\":12345");
+		HttpServer server = server(new FixedResponseHandler(200, response, new AtomicReference<>(), new AtomicReference<>()));
+		try
+		{
+			assertEquals(Long.valueOf(12345), client(server, "/api").requestPortfolioAdvice(request(), "token")
+				.getAdvice().getExpectedProfit());
+		}
+		finally
+		{
+			server.stop(0);
+		}
+	}
+
+	@Test
 	public void acceptsSafeInventoryGuidanceMetadata() throws Exception
 	{
 		HttpServer server = server(new FixedResponseHandler(200, responseWithInventoryGuidance(inventoryGuidance(1120000)), new AtomicReference<>(), new AtomicReference<>()));

@@ -14,7 +14,7 @@ public final class PortfolioRequestBuilder {
             Map<Long, Long> costs, long cashBudget, Duration nextReturnInterval,
             int participation, String accountId) {
         if (cashBudget < 0 || cashBudget > captured.getWalletCoins()) {
-            throw new IllegalArgumentException("Cash budget must be between zero and the coins in your inventory. Collect or withdraw coins, then read the portfolio again.");
+            throw new IllegalArgumentException("Cash budget must be between zero and the coins in your inventory. Collect or withdraw coins, then press Plan next visit again.");
         }
         if (nextReturnInterval.compareTo(Duration.ofMinutes(5)) < 0 || nextReturnInterval.compareTo(Duration.ofDays(7)) > 0) {
             throw new IllegalArgumentException("Your next return must be between five minutes and seven days away.");

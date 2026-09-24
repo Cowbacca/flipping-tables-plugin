@@ -170,6 +170,7 @@ public final class PortfolioModels
 		private final long realisedProfit;
 		private final long inventoryCost;
 		private final long conservativeInventoryValue;
+		private final Long expectedProfit;
 		private final List<String> limitations;
 		private final String searchStatus;
 
@@ -182,12 +183,21 @@ public final class PortfolioModels
 		public Advice(List<Action> actions, List<InventoryGuidance> inventoryGuidance, long projectedCashCommitted,
 				long realisedProfit, long inventoryCost, long conservativeInventoryValue, List<String> limitations, String searchStatus)
 		{
+			this(actions, inventoryGuidance, projectedCashCommitted, realisedProfit, inventoryCost,
+				conservativeInventoryValue, null, limitations, searchStatus);
+		}
+
+		public Advice(List<Action> actions, List<InventoryGuidance> inventoryGuidance, long projectedCashCommitted,
+				long realisedProfit, long inventoryCost, long conservativeInventoryValue, Long expectedProfit,
+				List<String> limitations, String searchStatus)
+		{
 			this.actions = immutableList(actions);
 			this.inventoryGuidance = immutableList(inventoryGuidance);
 			this.projectedCashCommitted = projectedCashCommitted;
 			this.realisedProfit = realisedProfit;
 			this.inventoryCost = inventoryCost;
 			this.conservativeInventoryValue = conservativeInventoryValue;
+			this.expectedProfit = expectedProfit;
 			this.limitations = immutableList(limitations);
 			this.searchStatus = searchStatus;
 		}
@@ -198,6 +208,7 @@ public final class PortfolioModels
 		public long getRealisedProfit() { return realisedProfit; }
 		public long getInventoryCost() { return inventoryCost; }
 		public long getConservativeInventoryValue() { return conservativeInventoryValue; }
+		public Long getExpectedProfit() { return expectedProfit; }
 		public List<String> getLimitations() { return limitations; }
 		public String getSearchStatus() { return searchStatus; }
 	}

@@ -220,6 +220,10 @@ public class FlippingTablesClient
 			requireLong(advice, "inventoryCost", 0, Long.MAX_VALUE);
 			requireLong(advice, "conservativeInventoryValue", 0, Long.MAX_VALUE);
 			requireLong(advice, "realisedProfit", Long.MIN_VALUE, Long.MAX_VALUE);
+			if (advice.has("expectedProfit"))
+			{
+				requireLong(advice, "expectedProfit", Long.MIN_VALUE, Long.MAX_VALUE);
+			}
 			validateActions(advice.getAsJsonArray("actions"));
 			validateLimitations(advice.getAsJsonArray("limitations"));
 			validateInventoryGuidance(advice);

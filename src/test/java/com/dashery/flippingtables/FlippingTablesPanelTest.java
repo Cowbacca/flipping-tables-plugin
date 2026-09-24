@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -83,7 +84,7 @@ public class FlippingTablesPanelTest {
     }
 
     @Test
-    public void selectAllSendsEveryTradeableInventoryItem() throws Exception {
+    public void defaultPlanSendsEveryTradeableInventoryItemWithOneClick() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             FlippingTablesPlugin plugin = mock(FlippingTablesPlugin.class);
             FlippingTablesPanel panel = new FlippingTablesPanel(plugin, new FlippingTablesConfig() {},
@@ -91,10 +92,15 @@ public class FlippingTablesPanelTest {
             CapturedPortfolio captured = PortfolioRequestBuilderTest.portfolio();
             panel.displayPortfolio(captured);
             fieldUnchecked(panel, "token", JPasswordField.class).setText("test-token");
-            fieldUnchecked(panel, "consent", JCheckBox.class).setSelected(true);
-
-            button(panel, "Select all").doClick();
+            assertTrue(fieldUnchecked(panel, "sellAll", JCheckBox.class).isSelected());
+            assertFalse(checkBoxLabels(panel).contains("Sell inventory"));
+            doAnswer(invocation -> {
+                invocation.<Runnable>getArgument(0).run();
+                return null;
+            }).when(plugin).readPortfolio(any(Runnable.class));
             fieldUnchecked(panel, "calculate", JButton.class).doClick();
+
+            fieldUnchecked(panel, "sellAll", JCheckBox.class).doClick();
             button(panel, "Clear selection").doClick();
             fieldUnchecked(panel, "calculate", JButton.class).doClick();
 
@@ -112,6 +118,45 @@ public class FlippingTablesPanelTest {
     }
 
     @Test
+    public void planButtonCanReadAndSubmitWithoutAnEarlierPortfolioCapture() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            FlippingTablesPlugin plugin = mock(FlippingTablesPlugin.class);
+            FlippingTablesPanel panel = new FlippingTablesPanel(plugin, new FlippingTablesConfig() {},
+                    new PortfolioAdviceRepository());
+            CapturedPortfolio captured = PortfolioRequestBuilderTest.portfolio();
+            fieldUnchecked(panel, "token", JPasswordField.class).setText("test-token");
+            doAnswer(invocation -> {
+                panel.displayPortfolio(captured);
+                invocation.<Runnable>getArgument(0).run();
+                return null;
+            }).when(plugin).readPortfolio(any(Runnable.class));
+
+            fieldUnchecked(panel, "calculate", JButton.class).doClick();
+
+            ArgumentCaptor<Set<Long>> selected = ArgumentCaptor.forClass(Set.class);
+            verify(plugin).requestAdvice(org.mockito.ArgumentMatchers.eq(captured), selected.capture(), anyMap(),
+                    org.mockito.ArgumentMatchers.eq(1000L), any(), anyString());
+            assertEquals(Set.of(4151L, 1515L), selected.getValue());
+            panel.shutdown();
+        });
+    }
+
+    @Test
+    public void showsExpectedProfitOnlyWhenReturnedByTheApi() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            FlippingTablesPanel panel = new FlippingTablesPanel(mock(FlippingTablesPlugin.class),
+                    new FlippingTablesConfig() {}, new PortfolioAdviceRepository());
+            PortfolioModels.Advice advice = new PortfolioModels.Advice(java.util.Collections.emptyList(),
+                    java.util.Collections.emptyList(), 1000, 0, 0, 500, 12345L,
+                    java.util.Collections.emptyList(), "EXACT");
+            panel.showAdvice(new PortfolioModels.AdviceResponse(1, advice, null), java.util.Collections.emptyMap());
+            assertTrue(textValues(fieldUnchecked(panel, "results", javax.swing.JPanel.class))
+                    .contains("Expected profit: 12,345 GP (estimate, not realised profit)."));
+            panel.shutdown();
+        });
+    }
+
+    @Test
     public void listedOnlyStockIsIncludedWithoutAnInventoryChoice() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             FlippingTablesPlugin plugin = mock(FlippingTablesPlugin.class);
@@ -124,7 +169,10 @@ public class FlippingTablesPanelTest {
             assertFalse(buttonLabels(panel).contains("Select all"));
             assertFalse(checkBoxLabels(panel).contains("Sell inventory"));
             fieldUnchecked(panel, "token", JPasswordField.class).setText("test-token");
-            fieldUnchecked(panel, "consent", JCheckBox.class).setSelected(true);
+            doAnswer(invocation -> {
+                invocation.<Runnable>getArgument(0).run();
+                return null;
+            }).when(plugin).readPortfolio(any(Runnable.class));
             fieldUnchecked(panel, "calculate", JButton.class).doClick();
 
             ArgumentCaptor<Set<Long>> selected = ArgumentCaptor.forClass(Set.class);
@@ -142,6 +190,7 @@ public class FlippingTablesPanelTest {
                     new PortfolioAdviceRepository());
             CapturedPortfolio captured = PortfolioRequestBuilderTest.portfolio();
             panel.displayPortfolio(captured);
+            fieldUnchecked(panel, "sellAll", JCheckBox.class).doClick();
             java.util.List<Object> inputs = fieldUnchecked(panel, "stockInputs", java.util.List.class);
             JCheckBox include = fieldUnchecked(inputs.get(0), "include", JCheckBox.class);
             JTextField cost = fieldUnchecked(inputs.get(0), "cost", JTextField.class);
@@ -335,11 +384,11 @@ public class FlippingTablesPanelTest {
                         new PortfolioAdviceRepository());
                 CapturedPortfolio captured = PortfolioRequestBuilderTest.portfolio();
                 panel.displayPortfolio(captured);
+                field(panel, "sellAll", JCheckBox.class).doClick();
 
                 JTextField hours = field(panel, "hours", JTextField.class);
                 JTextField cash = field(panel, "cash", JTextField.class);
                 JPasswordField token = field(panel, "token", JPasswordField.class);
-                JCheckBox consent = field(panel, "consent", JCheckBox.class);
                 JButton calculate = field(panel, "calculate", JButton.class);
                 JTextArea status = field(panel, "status", JTextArea.class);
                 @SuppressWarnings("unchecked")
@@ -349,7 +398,10 @@ public class FlippingTablesPanelTest {
                 JTextField cost = field(firstStock, "cost", JTextField.class);
 
                 token.setText("test-token");
-                consent.setSelected(true);
+                doAnswer(invocation -> {
+                    invocation.<Runnable>getArgument(0).run();
+                    return null;
+                }).when(plugin).readPortfolio(any(Runnable.class));
                 cash.setText("500");
                 include.setSelected(true);
                 cost.setText("100");

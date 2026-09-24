@@ -53,14 +53,13 @@ public class FlippingTablesPanel extends PluginPanel {
     private final PortfolioAdviceRepository repository;
     private final JPasswordField token = new JPasswordField();
     private final JTextField hours = new JTextField();
-    private final JTextField cash = new JTextField("0");
-    private final JCheckBox consent = new JCheckBox("Send portfolio for advice");
+    private final JTextField cash = new JTextField();
+    private final JCheckBox sellAll = new JCheckBox("Sell all carried items", true);
     private final JCheckBox recordOffers = new JCheckBox("Record Grand Exchange offers");
-    private final JButton read = new JButton("Read current portfolio");
     private final JButton calculate = new JButton("Plan next visit");
     private final JButton viewResults = new JButton("View offer results");
     private final JTextArea disclosure = text("");
-    private final JTextArea status = text("Log in, collect finished offers, then read your portfolio.");
+    private final JTextArea status = text("Log in, collect finished offers, then plan your next visit.");
     private final JTextArea recordingStatus = text("Offer recording is off.");
     private final JPanel stocks = column();
     private final JPanel results = column();
@@ -86,28 +85,25 @@ public class FlippingTablesPanel extends PluginPanel {
         hours.setText(Integer.toString(config.nextReturnHours()));
         add(field("Hours until next return", hours));
         add(text("Advice always evaluates eight-hour buying and selling windows. Your return time only allows buy-limit resets before you return."));
-        add(field("Cash budget (carried GP)", cash));
-        add(consent);
+        add(field("Cash budget (blank = all carried GP)", cash));
+        add(sellAll);
         add(recordOffers);
         add(text("Save GE trades to your Flipping Tables API. Account names are not sent."));
         add(recordingStatus);
         add(Box.createVerticalStrut(8));
-        add(read);
         add(stocks);
         add(Box.createVerticalStrut(8));
         add(calculate);
         add(status);
         add(viewResults);
         add(results);
-        calculate.setEnabled(false);
-        consent.setAlignmentX(Component.LEFT_ALIGNMENT);
-        consent.setOpaque(false);
-        consent.setForeground(Color.WHITE);
+        sellAll.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sellAll.setOpaque(false);
+        sellAll.setForeground(Color.WHITE);
         recordOffers.setAlignmentX(Component.LEFT_ALIGNMENT);
         recordOffers.setOpaque(false);
         recordOffers.setForeground(Color.WHITE);
         recordOffers.setSelected(config.recordOffers());
-        read.setAlignmentX(Component.LEFT_ALIGNMENT);
         calculate.setAlignmentX(Component.LEFT_ALIGNMENT);
         viewResults.setAlignmentX(Component.LEFT_ALIGNMENT);
         updateDisclosure();
@@ -115,10 +111,16 @@ public class FlippingTablesPanel extends PluginPanel {
         if (environmentToken != null) {
             token.setText(environmentToken);
         }
-        read.addActionListener(event -> plugin.readPortfolio());
-        calculate.addActionListener(event -> submit());
+        calculate.addActionListener(event -> plugin.readPortfolio(this::submit));
         viewResults.addActionListener(event -> LinkBrowser.browse(resultsUrl()));
-        consent.addActionListener(event -> inputChanged());
+        sellAll.addActionListener(event -> {
+            saveStockSelections();
+            showStockChoices();
+            inputChanged();
+            if (!sellAll.isSelected()) {
+                plugin.readPortfolio();
+            }
+        });
         recordOffers.addActionListener(event -> recordingChanged());
         watch(hours);
         watch(cash);
@@ -130,17 +132,23 @@ public class FlippingTablesPanel extends PluginPanel {
         updating = true;
         saveStockSelections();
         captured = value;
-        cash.setText(Long.toString(value.getWalletCoins()));
-        stocks.removeAll();
-        stockInputs.clear();
-        stocks.add(text(value.getOpenOffers().size() + " open offers across " + value.getTotalSlots() + " slots."));
-        addListedStock(value);
-        addInventoryStock(value);
-        stocks.add(text("Uncollected items and bank stock are excluded. Cost is optional; 0 means unknown."));
-        stocks.add(text("Buy limits include fills observed this session. Earlier or offline purchases may leave less allowance. Check limits in game."));
-        status.setText("Portfolio ready. Review stock, budget and your next return before requesting advice.");
+        showStockChoices();
+        status.setText("Portfolio ready. Review your budget and next return before requesting advice.");
         setBusy(false);
         updating = false;
+        refresh();
+    }
+
+    private void showStockChoices() {
+        stocks.removeAll();
+        stockInputs.clear();
+        if (!sellAll.isSelected() && captured != null) {
+            stocks.add(text(captured.getOpenOffers().size() + " open offers across " + captured.getTotalSlots() + " slots."));
+            addListedStock(captured);
+            addInventoryStock(captured);
+            stocks.add(text("Uncollected items and bank stock are excluded. Cost is optional; 0 means unknown."));
+            stocks.add(text("Buy limits include fills observed this session. Earlier or offline purchases may leave less allowance. Check limits in game."));
+        }
         refresh();
     }
 
@@ -226,7 +234,10 @@ public class FlippingTablesPanel extends PluginPanel {
         results.removeAll();
         PortfolioModels.Advice advice = response.getAdvice();
         status.setText("Advice ready. Market data through " + response.getMarketDataThrough() + ".");
-        results.add(text("Estimated cash committed: " + advice.getProjectedCashCommitted() + " GP. Inventory value estimate: " + advice.getConservativeInventoryValue() + " GP. These are estimates, not realised profit."));
+        if (advice.getExpectedProfit() != null) {
+            results.add(text("Expected profit: " + formatNumber(advice.getExpectedProfit()) + " GP (estimate, not realised profit)."));
+        }
+        results.add(text("Estimated cash committed: " + formatNumber(advice.getProjectedCashCommitted()) + " GP. Inventory value estimate: " + formatNumber(advice.getConservativeInventoryValue()) + " GP."));
         results.add(text("Search ft or click the coins button in GE search. Choose an item, then open its quantity or price entry and click Use suggested. Press Enter, then review and confirm the offer normally."));
         results.add(text("Exact suggested new offers are marked Placed; continue with the remaining items. If your portfolio changes, saved advice stays visible for reference; review its suggestions against your current portfolio or request a fresh plan."));
         if (adviceNotice != null) {
@@ -297,7 +308,7 @@ public class FlippingTablesPanel extends PluginPanel {
         }
         showAdvice(displayedAdvice, itemNames);
         status.setText(repository.isActionable()
-                ? "Plan progress updated. Continue the remaining suggestions, or read your portfolio to replan."
+                ? "Plan progress updated. Continue the remaining suggestions, or press Plan next visit to replan."
                 : "Existing advice is retained for reference; request a fresh plan before using suggestions.");
     }
 
@@ -350,15 +361,13 @@ public class FlippingTablesPanel extends PluginPanel {
 
     public void setBusy(boolean busy) {
         this.busy = busy;
-        read.setEnabled(!busy);
-        calculate.setEnabled(!busy && captured != null);
+        calculate.setEnabled(!busy);
         calculate.setText(busy ? "Working..." : "Plan next visit");
     }
 
     public void configurationChanged(boolean endpointChanged) {
         if (endpointChanged) {
             token.setText("");
-            consent.setSelected(false);
             recordOffers.setSelected(false);
         }
         updateDisclosure();
@@ -373,7 +382,6 @@ public class FlippingTablesPanel extends PluginPanel {
 
     public void shutdown() {
         token.setText("");
-        consent.setSelected(false);
         recordOffers.setSelected(false);
         captured = null;
         stockInputs.clear();
@@ -385,10 +393,7 @@ public class FlippingTablesPanel extends PluginPanel {
     private void submit() {
         try {
             if (captured == null) {
-                throw new IllegalArgumentException("Read your current portfolio first.");
-            }
-            if (!consent.isSelected()) {
-                throw new IllegalArgumentException("Confirm that this portfolio may be sent to the API.");
+                throw new IllegalArgumentException("Unable to read your current portfolio.");
             }
             String apiToken = new String(token.getPassword()).trim();
             if (apiToken.isEmpty()) {
@@ -396,6 +401,13 @@ public class FlippingTablesPanel extends PluginPanel {
             }
             Set<Long> selected = new HashSet<>();
             Map<Long, Long> costs = new HashMap<>();
+            if (sellAll.isSelected()) {
+                for (CapturedPortfolio.Stock stock : captured.getStock()) {
+                    if (stock.getCarriedQuantity() > 0) {
+                        selected.add(stock.getItemId());
+                    }
+                }
+            }
             for (StockInput input : stockInputs) {
                 if (input.include.isSelected()) {
                     selected.add(input.itemId);
@@ -408,7 +420,9 @@ public class FlippingTablesPanel extends PluginPanel {
                     costs.put(stock.getItemId(), VisitInputs.wholeNumber(selection.cost, "Item cost"));
                 }
             }
-            plugin.requestAdvice(captured, selected, costs, VisitInputs.wholeNumber(cash.getText(), "Cash budget"),
+            long cashBudget = cash.getText().trim().isEmpty() ? captured.getWalletCoins()
+                    : VisitInputs.wholeNumber(cash.getText(), "Cash budget");
+            plugin.requestAdvice(captured, selected, costs, cashBudget,
                     VisitInputs.visitInterval(hours.getText()), apiToken);
         } catch (RuntimeException error) {
             showError(error.getMessage());
@@ -446,7 +460,7 @@ public class FlippingTablesPanel extends PluginPanel {
     }
 
     private void updateDisclosure() {
-        disclosure.setText("On request, send your cash budget, selected stock, open offers and observed limits to:\n" + config.apiBaseUrl() + "\nRuneScape login details and account names are not sent. The API token authenticates the request.");
+        disclosure.setText("Planning sends your cash budget, chosen stock, open offers and observed limits to:\n" + config.apiBaseUrl() + "\nRuneScape login details and account names are not sent. The API token authenticates the request.");
     }
 
     private static JPanel column() {

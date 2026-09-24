@@ -3,6 +3,7 @@ package com.dashery.flippingtables;
 import net.runelite.client.ui.ColorScheme;
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
+import javax.swing.JCheckBox;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
@@ -33,6 +34,12 @@ public final class PanelPreview {
                         Collections.emptyMap(), 8, true, "2026-09-19T20:00:00Z", "preview");
                 panel.displayPortfolio(captured);
                 render(panel, output.resolve("portfolio.png"));
+                for (Component component : panel.getComponents()) {
+                    if (component instanceof JCheckBox && "Sell all carried items".equals(((JCheckBox) component).getText())) {
+                        ((JCheckBox) component).doClick();
+                    }
+                }
+                render(panel, output.resolve("selective-portfolio.png"));
                 PortfolioModels.AdviceResponse response = new PortfolioModels.AdviceResponse(1,
                         new PortfolioModels.Advice(Arrays.asList(
                                 new PortfolioModels.Action("KEEP", 4151, 2, 100, "slot-0"),
