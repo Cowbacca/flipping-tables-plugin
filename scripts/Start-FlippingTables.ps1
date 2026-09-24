@@ -5,7 +5,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Split-Path -Parent $PSScriptRoot
-$jarPath = Join-Path $projectDirectory 'build/libs/flippingtables-2.1.0-all.jar'
+$buildConfiguration = Get-Content -LiteralPath (Join-Path $projectDirectory 'build.gradle') -Raw
+$versionMatch = [regex]::Match($buildConfiguration, "(?m)^version = '([0-9]+\.[0-9]+\.[0-9]+)'\r?$")
+if (-not $versionMatch.Success) {
+    throw 'Cannot read the client version from build.gradle.'
+}
+$jarPath = Join-Path $projectDirectory "build/libs/flippingtables-$($versionMatch.Groups[1].Value)-all.jar"
 $runtimeDirectory = Join-Path $env:LOCALAPPDATA 'RuneLite/jre/bin'
 $javaPath = Join-Path $runtimeDirectory 'java.exe'
 
