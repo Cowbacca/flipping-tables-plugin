@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 final class TradeObservationStore implements AutoCloseable {
     private final Path file;
@@ -24,6 +25,12 @@ final class TradeObservationStore implements AutoCloseable {
 
     TradeObservationStore(Path file) {
         this.file = file;
+    }
+
+    static TradeObservationStore forClientProfile(Path directory, String profileName) {
+        Path clientDirectory = profileName == null ? directory
+                : directory.resolve("profiles").resolve(UUID.nameUUIDFromBytes(profileName.getBytes(StandardCharsets.UTF_8)).toString());
+        return new TradeObservationStore(clientDirectory.resolve("offer-observations.json"));
     }
 
     synchronized AccountLedger load(String profileKey) throws IOException {

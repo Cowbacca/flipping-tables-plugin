@@ -3,6 +3,8 @@ package com.dashery.flippingtables;
 import com.google.inject.AbstractModule;
 import com.google.inject.Guice;
 import com.google.inject.Injector;
+import com.google.inject.name.Names;
+import com.google.inject.util.Providers;
 import net.runelite.api.Client;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -16,6 +18,15 @@ import static org.mockito.Mockito.mock;
 public class PluginInjectionTest {
     @Test
     public void createsPluginWithRuneLiteProvidedServices() {
+        assertPluginCreation(null);
+    }
+
+    @Test
+    public void createsPluginWithANamedRuneLiteProfile() {
+        assertPluginCreation("Cowflippa");
+    }
+
+    private void assertPluginCreation(String profileName) {
         Injector injector = Guice.createInjector(new AbstractModule() {
             @Override
             protected void configure() {
@@ -26,6 +37,7 @@ public class PluginInjectionTest {
                 bind(OkHttpClient.class).toInstance(new OkHttpClient());
                 bind(FlippingTablesConfig.class).toInstance(new FlippingTablesConfig() {});
                 bind(ConfigManager.class).toInstance(mock(ConfigManager.class));
+                bind(String.class).annotatedWith(Names.named("profile")).toProvider(Providers.of(profileName));
             }
         });
         assertNotNull(injector.getInstance(FlippingTablesPlugin.class));

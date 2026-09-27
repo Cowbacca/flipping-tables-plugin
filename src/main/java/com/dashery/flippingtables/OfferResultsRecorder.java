@@ -9,7 +9,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import javax.inject.Inject;
+import javax.inject.Named;
 import javax.inject.Singleton;
+import javax.annotation.Nullable;
 import net.runelite.client.callback.ClientThread;
 
 @Singleton
@@ -46,9 +48,9 @@ final class OfferResultsRecorder {
     private Consumer<String> status = ignored -> { };
 
     @Inject
-    OfferResultsRecorder(FlippingTablesClient api, ClientThread clientThread) {
-        this(api, clientThread, new TradeObservationStore(Path.of(System.getProperty("user.home"), ".runelite",
-                "flipping-tables", "offer-observations.json")), Clock.systemUTC());
+    OfferResultsRecorder(FlippingTablesClient api, ClientThread clientThread, @Named("profile") @Nullable String profileName) {
+        this(api, clientThread, TradeObservationStore.forClientProfile(Path.of(System.getProperty("user.home"), ".runelite",
+                "flipping-tables"), profileName), Clock.systemUTC());
     }
 
     OfferResultsRecorder(FlippingTablesClient api, ClientThread clientThread, TradeObservationStore store, Clock clock) {

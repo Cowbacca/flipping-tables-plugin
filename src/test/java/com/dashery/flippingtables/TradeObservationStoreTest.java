@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -17,6 +18,42 @@ public class TradeObservationStoreTest {
     private static final String PROFILE = "normal-account\nhttps://one.example/api";
     private static final String DESTINATION_ONE = "https://one.example/api";
     private static final String DESTINATION_TWO = "https://two.example/api";
+
+    @Test
+    public void namedClientsRecordAlongsideTheOriginalJournalWithoutSharingHistory() throws Exception {
+        Path directory = Files.createTempDirectory("trade-store-clients");
+        Path legacyJournal = directory.resolve("offer-observations.json");
+        String originalAccount;
+        String originalEvent;
+        try (TradeObservationStore legacy = new TradeObservationStore(legacyJournal)) {
+            originalAccount = legacy.load(PROFILE).accountId;
+            originalEvent = append(legacy, 0, DESTINATION_ONE).eventId;
+        }
+
+        String cowflippaAccount;
+        String cowflippaEvent;
+        try (TradeObservationStore original = TradeObservationStore.forClientProfile(directory, null);
+             TradeObservationStore cowflippa = TradeObservationStore.forClientProfile(directory, "Cowflippa")) {
+            assertEquals(originalAccount, original.load(PROFILE).accountId);
+            cowflippaAccount = cowflippa.load(PROFILE).accountId;
+            assertNotEquals(originalAccount, cowflippaAccount);
+            assertTrue(cowflippa.batch(PROFILE, DESTINATION_ONE).isEmpty());
+            append(cowflippa, 1, DESTINATION_ONE);
+            assertEquals(originalEvent, original.batch(PROFILE, DESTINATION_ONE).get(0).observation.eventId);
+            cowflippa.acknowledge(PROFILE, cowflippa.batch(PROFILE, DESTINATION_ONE));
+            assertEquals(1, original.batch(PROFILE, DESTINATION_ONE).size());
+            assertTrue(cowflippa.batch(PROFILE, DESTINATION_ONE).isEmpty());
+            cowflippaEvent = append(cowflippa, 2, DESTINATION_ONE).eventId;
+            try (TradeObservationStore duplicate = TradeObservationStore.forClientProfile(directory, "Cowflippa")) {
+                assertThrows(IOException.class, () -> duplicate.load(PROFILE));
+            }
+        }
+
+        try (TradeObservationStore reopened = TradeObservationStore.forClientProfile(directory, "Cowflippa")) {
+            assertEquals(cowflippaAccount, reopened.load(PROFILE).accountId);
+            assertEquals(cowflippaEvent, reopened.batch(PROFILE, DESTINATION_ONE).get(0).observation.eventId);
+        }
+    }
 
     @Test
     public void persistsAccountAndEventUuidsAcrossFreshStoreInstances() throws Exception {
