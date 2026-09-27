@@ -1,6 +1,8 @@
 param(
     [string]$ApiAccessFile,
-    [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'FlippingTables')
+    [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'FlippingTables'),
+    [string]$Profile,
+    [string]$ShortcutName = 'Flipping Tables (RuneLite)'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,7 +35,7 @@ Copy-Item -LiteralPath $sourceJar -Destination (Join-Path $installedLibraries $j
 Copy-Item -LiteralPath $compiledLauncher -Destination (Join-Path $InstallDirectory 'FlippingTables.exe') -Force
 Set-Content -LiteralPath (Join-Path $InstallDirectory 'client-version.txt') -Value $version -Encoding ASCII
 Copy-Item -LiteralPath (Join-Path $projectDirectory 'README.md') -Destination (Join-Path $InstallDirectory 'README.md') -Force
-$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) 'Flipping Tables (RuneLite).lnk'
+$shortcutPath = Join-Path ([Environment]::GetFolderPath('Programs')) "$ShortcutName.lnk"
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($shortcutPath)
 $existingArguments = $shortcut.Arguments
 $shortcut.TargetPath = Join-Path $InstallDirectory 'FlippingTables.exe'
@@ -44,6 +46,11 @@ if ($ApiAccessFile) {
     $shortcut.Arguments = '--api-access-file "' + $matches[1] + '"'
 } else {
     $shortcut.Arguments = ''
+}
+if ($Profile) {
+    $shortcut.Arguments += ' --profile "' + $Profile + '"'
+} elseif ($existingArguments -match '--profile\s+"([^"\r\n]+)"') {
+    $shortcut.Arguments += ' --profile "' + $matches[1] + '"'
 }
 $shortcut.IconLocation = Join-Path $InstallDirectory 'FlippingTables.exe'
 $shortcut.Save()

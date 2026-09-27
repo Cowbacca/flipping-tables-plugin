@@ -21,7 +21,8 @@ internal static class FlippingTablesLauncher
             string logDirectory = Path.Combine(root, "logs");
             Directory.CreateDirectory(logDirectory);
             logPath = Path.Combine(logDirectory, "launcher-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + ".log");
-            string accessFile = ParseArguments(args);
+            string profile;
+            string accessFile = ParseArguments(args, out profile);
             string versionText = File.ReadAllText(Path.Combine(root, "client-version.txt")).Trim();
             Version version;
             if (!Version.TryParse(versionText, out version))
@@ -44,7 +45,8 @@ internal static class FlippingTablesLauncher
                 apiToken = ReadToken(accessFile);
             }
             ProcessStartInfo start = new ProcessStartInfo(javaPath,
-                "-ea -jar " + Quote(jarPath) + (checkOnly ? " --help" : " --developer-mode"));
+                "-ea -jar " + Quote(jarPath) + (checkOnly ? " --help" : " --developer-mode")
+                + (profile == null ? "" : " --profile " + Quote(profile)));
             start.WorkingDirectory = root;
             start.UseShellExecute = false;
             start.CreateNoWindow = true;
@@ -88,9 +90,10 @@ internal static class FlippingTablesLauncher
         }
     }
 
-    private static string ParseArguments(string[] args)
+    private static string ParseArguments(string[] args, out string profile)
     {
         string accessFile = null;
+        profile = null;
         for (int index = 0; index < args.Length; index++)
         {
             if (args[index] == "--check")
@@ -100,6 +103,15 @@ internal static class FlippingTablesLauncher
             if (args[index] == "--api-access-file" && index + 1 < args.Length && accessFile == null)
             {
                 accessFile = args[++index];
+                continue;
+            }
+            if (args[index] == "--profile" && index + 1 < args.Length && profile == null)
+            {
+                profile = args[++index];
+                if (String.IsNullOrWhiteSpace(profile) || profile.IndexOf('"') >= 0 || profile.EndsWith("\\") || profile.StartsWith("--"))
+                {
+                    throw new ArgumentException("Specify a non-empty RuneLite profile name without double quotes or a trailing backslash.");
+                }
                 continue;
             }
             throw new ArgumentException("Unrecognized launcher argument. Reinstall the Start-menu shortcut.");

@@ -27,6 +27,12 @@ Paste the API token into the sidebar. It remains in memory and is cleared when t
 
 If your account uses the Jagex Launcher, follow RuneLite's [official development login instructions](https://github.com/runelite/runelite/wiki/Using-Jagex-Accounts). That is a deliberate user-controlled setup because it writes credentials capable of logging into your game account. This plugin and its startup script do not enable that setting, read those credentials, or change the Jagex Launcher. Ordinary Plugin Hub distribution would avoid this development-client setup.
 
+### Separate clients
+
+The native launcher accepts `--profile "Cowflippa"` to select a RuneLite configuration profile. Install another shortcut with `-Profile 'Cowflippa' -ShortcutName 'Cowflippa (RuneLite)' -InstallDirectory <separate-directory> -ApiAccessFile <client-access-file>`. Each shortcut can load its own API key. The server must assign that key its own named history for separate results.
+
+The profile's Login Screen settings can prefill an email using `loginscreen.syncusername=true` and `loginscreen.username=<email>`. This does not store a game password or log in automatically. RuneLite creates missing named profiles on first launch.
+
 ## Plan a visit
 
 1. Log in and collect completed/cancelled offers. Collect any coins or items from partial offers that you want available to this plan. Withdraw the coins and stock you intend to use.
