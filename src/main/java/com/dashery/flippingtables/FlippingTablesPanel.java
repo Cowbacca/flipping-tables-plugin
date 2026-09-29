@@ -580,7 +580,7 @@ public class FlippingTablesPanel extends PluginPanel {
                 + " GP each; latest " + quoteAge(quote.getLatestObservationAt()) + "; volume " + formatNumber(quote.getObservedVolume())
                 + " observed, " + formatNumber(quote.getProjectedVolume()) + " projected."));
         if (quote.isUsedFallback()) {
-            card.add(text("Four-hour evidence fallback: projected volume is scaled to the selling window; it does not promise a fill or profit."));
+            card.add(text("Using " + evidenceWindow(quote.getEvidenceWindow()) + " of price evidence: projected volume is scaled to the selling window; it does not promise a fill or profit."));
         }
         if (quote.getProjectedVolume() < guidance.getQuantity()) {
             card.add(text("Observed market volume does not support the full quantity within the selling window."));

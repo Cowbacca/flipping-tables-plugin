@@ -236,8 +236,8 @@ public class FlippingTablesPanelTest {
         SwingUtilities.invokeAndWait(() -> {
             PortfolioModels.Action reprice = new PortfolioModels.Action("REPRICE", 4151, 3, 1120000, "slot-0");
             PortfolioModels.InventoryGuidance guidance = new PortfolioModels.InventoryGuidance(4151, 3, 3, "SELL",
-                    "Sell 3 using four hours of price evidence.", new PortfolioModels.SaleQuote(1120000,
-                    "PT4H", "2026-09-21T15:00:00Z", true, 8, 2));
+                    "Sell 3 using 24 hours of price evidence.", new PortfolioModels.SaleQuote(1120000,
+                    "PT24H", "2026-09-21T15:00:00Z", true, 48, 2));
             PortfolioModels.AdviceResponse response = response(java.util.Collections.singletonList(reprice),
                     java.util.Collections.singletonList(guidance));
             PortfolioAdviceRepository repository = new PortfolioAdviceRepository();
@@ -248,7 +248,8 @@ public class FlippingTablesPanelTest {
             panel.showAdvice(response, java.util.Collections.singletonMap(4151L, "Abyssal whip"));
 
             java.util.List<String> values = textValues(fieldUnchecked(panel, "results", javax.swing.JPanel.class));
-            assertTrue(values.stream().anyMatch(value -> value.contains("Price evidence: 4 hours at 1,120,000 GP each")));
+            assertTrue(values.stream().anyMatch(value -> value.contains("Price evidence: 24 hours at 1,120,000 GP each")));
+            assertTrue(values.stream().anyMatch(value -> value.contains("Using 24 hours of price evidence: projected volume is scaled")));
             assertEquals(1, values.stream().filter(value -> value.contains("Abyssal whip")).count());
             panel.shutdown();
         });
