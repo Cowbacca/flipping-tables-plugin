@@ -32,6 +32,8 @@ public class FlippingTablesClient
 {
 	private static final MediaType JSON = MediaType.parse("application/json");
 	private static final long MAX_GAME_VALUE = Integer.MAX_VALUE;
+	private static final long COINS_PER_PLATINUM_TOKEN = 1000;
+	private static final long MAX_GE_PRICE = MAX_GAME_VALUE * (COINS_PER_PLATINUM_TOKEN + 1);
 	private static final int MAX_RESPONSE_BYTES = 256 * 1024;
 	private static final int MAX_ACTIONS = 32;
 	private static final int MAX_INVENTORY_GUIDANCE = 128;
@@ -282,7 +284,7 @@ public class FlippingTablesClient
 				throw new IOException("Advice response contains an invalid inventory quote");
 			}
 			JsonObject quote = guidance.getAsJsonObject("quote");
-			requireLong(quote, "pricePerItem", 1, MAX_GAME_VALUE);
+			requireLong(quote, "pricePerItem", 1, MAX_GE_PRICE);
 			requireDuration(quote, "evidenceWindow");
 			requireTimestamp(quote, "latestObservationAt");
 			requireBoolean(quote, "usedFallback");
@@ -307,7 +309,7 @@ public class FlippingTablesClient
 			}
 			requireLong(action, "itemId", 1, MAX_GAME_VALUE);
 			requireLong(action, "quantity", 1, MAX_GAME_VALUE);
-			requireLong(action, "pricePerItem", 0, MAX_GAME_VALUE);
+			requireLong(action, "pricePerItem", 0, MAX_GE_PRICE);
 			if ("KEEP".equals(type) || "CANCEL".equals(type) || "REPRICE".equals(type))
 			{
 				requireString(action, "replacesOfferId", false, MAX_OFFER_ID);

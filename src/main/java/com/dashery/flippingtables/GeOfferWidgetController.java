@@ -3,8 +3,8 @@ package com.dashery.flippingtables;
 import lombok.AllArgsConstructor;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
-import net.runelite.api.VarClientInt;
 import net.runelite.api.VarClientStr;
+import net.runelite.api.Varbits;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.util.Text;
@@ -34,7 +34,7 @@ public class GeOfferWidgetController {
         }
         repository.selectedFor(dialog.itemId, dialog.side).ifPresentOrElse(action -> {
             long value = dialog.quantity ? action.getQuantity() : action.getPricePerItem();
-            if (value <= 0 || value > Integer.MAX_VALUE) {
+            if (value <= 0 || (dialog.quantity && value > Integer.MAX_VALUE)) {
                 clearSuggestion();
                 return;
             }
@@ -56,8 +56,7 @@ public class GeOfferWidgetController {
     }
 
     private Dialog currentDialog() {
-        if (client.getGameState() != GameState.LOGGED_IN
-                || client.getVarcIntValue(VarClientInt.INPUT_TYPE) != 7) {
+        if (client.getGameState() != GameState.LOGGED_IN) {
             return null;
         }
         Widget offer = client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER);
@@ -67,7 +66,7 @@ public class GeOfferWidgetController {
                 || input == null || input.isHidden()) {
             return null;
         }
-        String side = offerSide(offer);
+        String side = offerSide();
         int itemId = client.getVarpValue(CURRENT_GE_ITEM);
         String prompt = plainText(title).toLowerCase(Locale.ROOT);
         if (side == null || itemId <= 0 || (!prompt.startsWith("how many") && !prompt.contains("price"))) {
@@ -76,20 +75,13 @@ public class GeOfferWidgetController {
         return new Dialog(itemId, side, prompt.startsWith("how many"), input);
     }
 
-    private String offerSide(Widget offer) {
-        Widget[] children = offer.getChildren();
-        if (children != null) {
-            for (Widget child : children) {
-                if (child != null && !child.isHidden()) {
-                    String text = plainText(child);
-                    if ("Buy offer".equalsIgnoreCase(text)) {
-                        return "BUY";
-                    }
-                    if ("Sell offer".equalsIgnoreCase(text)) {
-                        return "SELL";
-                    }
-                }
-            }
+    private String offerSide() {
+        int creationType = client.getVarbitValue(Varbits.GE_OFFER_CREATION_TYPE);
+        if (creationType == 0) {
+            return "BUY";
+        }
+        if (creationType == 1) {
+            return "SELL";
         }
         return null;
     }

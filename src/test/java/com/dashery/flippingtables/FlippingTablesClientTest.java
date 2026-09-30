@@ -97,6 +97,25 @@ public class FlippingTablesClientTest
 	}
 
 	@Test
+	public void acceptsPricesAboveOldMaxCash() throws Exception
+	{
+		String action = "{\"type\":\"CREATE_BUY\",\"itemId\":4151,\"quantity\":1,\"pricePerItem\":2500000000}";
+		String response = validResponse(action).replace("\"limitations\":[]",
+			"\"inventoryGuidance\":[" + inventoryGuidance(2500000000L) + "],\"limitations\":[]");
+		HttpServer server = server(new FixedResponseHandler(200, response, new AtomicReference<>(), new AtomicReference<>()));
+		try
+		{
+			PortfolioModels.Advice advice = client(server, "/api").requestPortfolioAdvice(request(), "token").getAdvice();
+			assertEquals(2500000000L, advice.getActions().get(0).getPricePerItem());
+			assertEquals(2500000000L, advice.getInventoryGuidance().get(0).getQuote().getPricePerItem());
+		}
+		finally
+		{
+			server.stop(0);
+		}
+	}
+
+	@Test
 	public void acceptsLargeAggregatedQuoteVolumes() throws Exception
 	{
 		String guidance = inventoryGuidance(1120000).replace("\"observedVolume\":8", "\"observedVolume\":9223372036854775807")
@@ -178,6 +197,7 @@ public class FlippingTablesClientTest
 		assertInvalidResponse(validResponse("{\"type\":\"CREATE_BUY\",\"itemId\":1,\"quantity\":1.5,\"pricePerItem\":1}"));
 		assertInvalidResponse(validResponse("{\"type\":\"CANCEL\",\"itemId\":1,\"quantity\":1,\"pricePerItem\":1}"));
 		assertInvalidResponse(validResponse("{\"type\":\"CREATE_SELL\",\"itemId\":2147483648,\"quantity\":1,\"pricePerItem\":1}"));
+		assertInvalidResponse(validResponse("{\"type\":\"CREATE_BUY\",\"itemId\":1,\"quantity\":1,\"pricePerItem\":2149631130648}"));
 		assertInvalidResponse(validResponse(null).replace("\"searchStatus\":\"EXACT\"", "\"searchStatus\":\"OTHER\""));
 		assertInvalidResponse(validResponse(null).replace("\"limitations\":[]", "\"limitations\":[1]"));
 		assertInvalidResponse(validResponse(null).replace("\"marketDataThrough\":null", "\"marketDataThrough\":\"not-a-timestamp\""));

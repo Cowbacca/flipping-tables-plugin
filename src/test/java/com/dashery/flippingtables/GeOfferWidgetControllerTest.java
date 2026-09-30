@@ -2,9 +2,9 @@ package com.dashery.flippingtables;
 
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
-import net.runelite.api.VarClientInt;
 import net.runelite.api.VarClientStr;
 import net.runelite.api.VarPlayer;
+import net.runelite.api.Varbits;
 import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
@@ -25,7 +25,6 @@ public class GeOfferWidgetControllerTest {
     private final WidgetCreator widgets = mock(WidgetCreator.class);
     private final Widget offer = mock(Widget.class);
     private final Widget title = mock(Widget.class);
-    private final Widget heading = mock(Widget.class);
     private final Widget input = mock(Widget.class);
     private final PortfolioAdviceRepository repository = new PortfolioAdviceRepository();
     private final GeOfferWidgetController controller = new GeOfferWidgetController(repository, client, widgets);
@@ -37,13 +36,11 @@ public class GeOfferWidgetControllerTest {
         repository.save(new PortfolioModels.AdviceResponse(1, new PortfolioModels.Advice(Arrays.asList(buy, sell),
                 0, 0, 0, 0, Collections.emptyList(), "EXACT"), null), null);
         when(client.getGameState()).thenReturn(GameState.LOGGED_IN);
-        when(client.getVarcIntValue(VarClientInt.INPUT_TYPE)).thenReturn(7);
+        when(client.getVarbitValue(Varbits.GE_OFFER_CREATION_TYPE)).thenReturn(0);
         when(client.getVarpValue(VarPlayer.CURRENT_GE_ITEM)).thenReturn(4151);
         when(client.getWidget(WidgetInfo.GRAND_EXCHANGE_OFFER_CONTAINER)).thenReturn(offer);
         when(client.getWidget(WidgetInfo.CHATBOX_TITLE)).thenReturn(title);
         when(client.getWidget(WidgetInfo.CHATBOX_FULL_INPUT)).thenReturn(input);
-        when(offer.getChildren()).thenReturn(new Widget[]{heading});
-        when(heading.getText()).thenReturn("<col=ffffff>Buy offer</col>");
         when(title.getText()).thenReturn("How many do you wish to buy?");
     }
 
@@ -75,11 +72,11 @@ public class GeOfferWidgetControllerTest {
     }
 
     @Test
-    public void rechecksTheRenderedDialogAfterTheInputTypeEvent() {
-        when(heading.getText()).thenReturn("");
+    public void rejectsUnknownOfferSideAndUsesTheCurrentGeSide() {
+        when(client.getVarbitValue(Varbits.GE_OFFER_CREATION_TYPE)).thenReturn(2);
         controller.refresh();
         verify(widgets).clearSuggestion();
-        when(heading.getText()).thenReturn("Sell offer");
+        when(client.getVarbitValue(Varbits.GE_OFFER_CREATION_TYPE)).thenReturn(1);
         when(title.getText()).thenReturn("How many do you wish to sell?");
         controller.refresh();
         callback("Use suggested quantity: 3", "Use suggested quantity").run(null);
@@ -98,6 +95,19 @@ public class GeOfferWidgetControllerTest {
         controller.refresh();
         verify(client, never()).setVarcStrValue(anyInt(), anyString());
         verify(widgets).clearSuggestion();
+    }
+
+    @Test
+    public void priceSuggestionSupportsValuesAboveOldMaxCash() {
+        long price = 2_500_000_000L;
+        PortfolioModels.Action buy = new PortfolioModels.Action("CREATE_BUY", 4151, 1, price, null);
+        repository.save(new PortfolioModels.AdviceResponse(1, new PortfolioModels.Advice(
+                Collections.singletonList(buy), 0, 0, 0, 0, Collections.emptyList(), "EXACT"), null), null);
+        when(title.getText()).thenReturn("Set a price for each item:");
+
+        controller.refresh();
+        callback("Use suggested price: 2,500,000,000", "Use suggested price").run(null);
+        verify(client).setVarcStrValue(VarClientStr.INPUT_TEXT, "2500000000");
     }
 
     private JavaScriptCallback callback(String label, String action) {
