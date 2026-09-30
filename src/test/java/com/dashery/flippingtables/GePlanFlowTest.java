@@ -145,8 +145,8 @@ public class GePlanFlowTest {
             @Override public int getItemId() { return itemId; }
             @Override public int getTotalQuantity() { return quantity; }
             @Override public int getQuantitySold() { return filled; }
-            @Override public int getPrice() { return price; }
-            @Override public int getSpent() { return filled * price; }
+            @Override public long getPrice() { return price; }
+            @Override public long getSpent() { return (long) filled * price; }
             @Override public GrandExchangeOfferState getState() { return state; }
         };
     }

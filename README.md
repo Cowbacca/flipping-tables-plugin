@@ -4,9 +4,9 @@ A personal RuneLite client with a sidebar for the Flipping Tables portfolio API.
 
 ## Tested versions
 
-- RuneLite client **1.12.39**, pinned for reproducible compatibility testing.
+- RuneLite client **1.13.0**, pinned for reproducible compatibility testing.
 - RuneLite Windows launcher **2.8.0**, including Java 17; plugin bytecode targets Java 11.
-- Gradle **8.10**; Flipping Tables plugin **2.1.5**.
+- Gradle **8.10**; Flipping Tables plugin **2.1.6**.
 - API: `https://flippingtables.91-98-161-245.sslip.io/api/portfolio-snapshots/advice`.
 
 The standard RuneLite launcher and this personal development client are separate launch paths. Updating the normal launcher does not rebuild this bundled plugin client. Future RuneLite updates should be tested and the pinned `runeLiteVersion` updated before rebuilding.
@@ -19,7 +19,7 @@ $env:JAVA_HOME = 'C:/path/to/your/jdk-11-or-17'
 .\scripts\Install-PersonalClient.ps1 -ApiAccessFile 'C:/path/to/restricted/api-access.env'
 ```
 
-Building requires a full JDK 11 or 17. The output is `build/libs/flippingtables-2.1.5-all.jar`. From a development shell that permits local build scripts, the installer compiles the small Windows launcher using the .NET Framework compiler already present on Windows, copies the built client into `%LOCALAPPDATA%/FlippingTables`, and creates **Flipping Tables (RuneLite)** in the Start menu. Close the personal client before reinstalling. The API access file is optional; omitting it preserves an existing shortcut's access-file path when available.
+Building requires a full JDK 11 or 17. The output is `build/libs/flippingtables-2.1.6-all.jar`. From a development shell that permits local build scripts, the installer compiles the small Windows launcher using the .NET Framework compiler already present on Windows, copies the built client into `%LOCALAPPDATA%/FlippingTables`, and creates **Flipping Tables (RuneLite)** in the Start menu. Close the personal client before reinstalling. The API access file is optional; omitting it preserves an existing shortcut's access-file path when available.
 
 Normal launches use `FlippingTables.exe` directly and do not invoke PowerShell or change its execution policy. The native launcher reads `client-version.txt`, uses the official RuneLite installation's bundled Java runtime, and enables assertions. It shows a persistent error message on failure and records startup output in capped logs under the installed `logs` directory. `FlippingTables.exe --check` validates the installed Java/JAR entry point without opening the game; a successful check is not a substitute for verifying full client initialization. `gradlew run` and `scripts/Start-FlippingTables.ps1 -CheckOnly` remain available for development. The bundled JAR contains the launcher entry point, plugin and RuneLite runtime dependencies; regression tests and their dependencies are excluded.
 
@@ -56,6 +56,6 @@ Amounts are estimates, not realised profit. The panel shows expected profit only
 
 `gradlew test` covers API serialization/authentication/errors, response bounds, partial sell inventory, observed limit windows, input validation, GE search rebuilds and normal typing, item-bound numeric helpers, stale callbacks, and remaining-plan reconciliation across ordered game events. `PanelPreview` renders the real sidebar components into images for layout inspection. Live account interaction still needs an in-game check; offline tests do not prove a game widget ID remains correct after a later OSRS update.
 
-The GE integration uses the pinned RuneLite [search and offer setup script constants](https://github.com/runelite/runelite/blob/runelite-parent-1.12.39/runelite-api/src/main/java/net/runelite/api/ScriptID.java), checks live widget visibility and dialog state again on each helper click, and refreshes after scripts have built the widgets. It does not assume that reusing a chatbox parent means its children survived.
+The GE integration uses the pinned RuneLite [search and offer setup script constants](https://github.com/runelite/runelite/blob/runelite-parent-1.13.0/runelite-api/src/main/java/net/runelite/api/ScriptID.java), checks live widget visibility and dialog state again on each helper click, and refreshes after scripts have built the widgets. It does not assume that reusing a chatbox parent means its children survived.
 
 See [public release considerations](PUBLIC_RELEASE.md) for paid API access and Plugin Hub requirements. This branch is a personal client build; no Plugin Hub submission or billing changes are made.

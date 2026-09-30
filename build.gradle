@@ -12,7 +12,7 @@ repositories {
     mavenCentral()
 }
 
-def runeLiteVersion = '1.12.39'
+def runeLiteVersion = '1.13.0'
 def pluginMainClass = 'com.dashery.flippingtables.FlippingTablesPluginTest'
 
 configurations {
@@ -35,7 +35,7 @@ dependencies {
 }
 
 group = 'com.dashery.flippingtables'
-version = '2.1.5'
+version = '2.1.6'
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'

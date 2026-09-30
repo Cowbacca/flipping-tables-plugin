@@ -134,7 +134,7 @@ public class PortfolioAdviceRepository {
                 .findFirst().orElse("");
     }
 
-    public synchronized String exactRecommendationIdFor(int itemId, String side, int quantity, int price) {
+    public synchronized String exactRecommendationIdFor(int itemId, String side, int quantity, long price) {
         if (response == null || isExpired()) {
             return null;
         }

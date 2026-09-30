@@ -11,7 +11,7 @@ final class TradeObservation {
     final int itemId;
     final String side;
     final String state;
-    final int pricePerItem;
+    final long pricePerItem;
     final int totalQuantity;
     final int filledQuantity;
     final long cumulativeGp;
@@ -47,12 +47,12 @@ final class OfferSnapshot {
     final int itemId;
     final String side;
     final String state;
-    final int pricePerItem;
+    final long pricePerItem;
     final int totalQuantity;
     final int filledQuantity;
     final long cumulativeGp;
 
-    OfferSnapshot(int slot, int itemId, String side, String state, int pricePerItem, int totalQuantity,
+    OfferSnapshot(int slot, int itemId, String side, String state, long pricePerItem, int totalQuantity,
             int filledQuantity, long cumulativeGp) {
         this.slot = slot;
         this.itemId = itemId;
@@ -75,7 +75,7 @@ final class TrackedOffer {
     int sequence;
     int itemId;
     String side;
-    int pricePerItem;
+    long pricePerItem;
     int totalQuantity;
     int filledQuantity;
     long cumulativeGp;

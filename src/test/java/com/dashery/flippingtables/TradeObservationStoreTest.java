@@ -78,6 +78,27 @@ public class TradeObservationStoreTest {
     }
 
     @Test
+    public void preservesOfferPricesAboveTheOldCashLimit() throws Exception {
+        Path journal = Files.createTempDirectory("trade-store-large-price").resolve("journal.json");
+        long price = 2_271_241_823L;
+        OfferSnapshot snapshot = new OfferSnapshot(0, 4151, "BUY", "OPEN", price, 1, 1, price);
+
+        try (TradeObservationStore store = new TradeObservationStore(journal)) {
+            store.load(PROFILE);
+            TrackedOffer offer = TrackedOffer.start(snapshot);
+            TradeObservation observation = new TradeObservation(offer.offerId, offer.sequence, snapshot, "OPEN",
+                    Instant.parse("2026-09-30T12:00:00Z"), null, false, false, null);
+            store.append(PROFILE, offer, observation, DESTINATION_ONE);
+        }
+
+        try (TradeObservationStore reopened = new TradeObservationStore(journal)) {
+            TradeObservationStore.AccountLedger ledger = reopened.load(PROFILE);
+            assertEquals(price, ledger.offers.get(0).pricePerItem);
+            assertEquals(price, reopened.batch(PROFILE, DESTINATION_ONE).get(0).observation.pricePerItem);
+        }
+    }
+
+    @Test
     public void batchesAndAcknowledgesOnlyTheRequestedDestinationAndEvents() throws Exception {
         Path journal = Files.createTempDirectory("trade-store-destination").resolve("journal.json");
 

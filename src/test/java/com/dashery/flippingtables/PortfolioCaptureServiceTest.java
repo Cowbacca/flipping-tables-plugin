@@ -118,8 +118,8 @@ public class PortfolioCaptureServiceTest {
             @Override public int getQuantitySold() { return quantitySold; }
             @Override public int getItemId() { return itemId; }
             @Override public int getTotalQuantity() { return totalQuantity; }
-            @Override public int getPrice() { return 100; }
-            @Override public int getSpent() { return quantitySold * 100; }
+            @Override public long getPrice() { return 100; }
+            @Override public long getSpent() { return (long) quantitySold * 100; }
             @Override public GrandExchangeOfferState getState() { return state; }
         };
     }

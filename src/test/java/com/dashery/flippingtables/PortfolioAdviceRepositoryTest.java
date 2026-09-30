@@ -76,6 +76,16 @@ public class PortfolioAdviceRepositoryTest {
         assertSame(reprice, repository.selectedFor(1515, "SELL").get());
     }
 
+    @Test
+    public void matchesAnObservedOfferPriceAboveTheOldCashLimit() {
+        PortfolioAdviceRepository repository = new PortfolioAdviceRepository();
+        long price = 2_271_241_823L;
+        PortfolioModels.Action buy = new PortfolioModels.Action("CREATE_BUY", 4151, 1, price, null, "recommendation");
+        repository.save(response(buy), null);
+
+        assertEquals("recommendation", repository.exactRecommendationIdFor(4151, "BUY", 1, price));
+    }
+
     private static PortfolioModels.AdviceResponse response(PortfolioModels.Action... actions) {
         return new PortfolioModels.AdviceResponse(1, new PortfolioModels.Advice(Arrays.asList(actions), 0, 0, 0, 0,
                 Collections.emptyList(), "EXACT"), "2026-09-19T20:00:00Z");

@@ -128,12 +128,12 @@ public class GeLimitsTrackerTest {
             }
 
             @Override
-            public int getPrice() {
+            public long getPrice() {
                 return 1;
             }
 
             @Override
-            public int getSpent() {
+            public long getSpent() {
                 return quantitySold;
             }
 
